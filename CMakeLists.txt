@@ -1,0 +1,11 @@
+cmake_minimum_required(VERSION 3.19)
+project(wasmc C)
+
+set(CMAKE_C_STANDARD 11)
+
+set(SOURCES_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
+
+set(SOURCES
+        ${SOURCES_ROOT}/cli.c)
+
+add_executable(wasmc ${SOURCES})
