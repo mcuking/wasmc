@@ -6,6 +6,8 @@ set(CMAKE_C_STANDARD 11)
 set(SOURCES_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 
 set(SOURCES
-        ${SOURCES_ROOT}/cli.c)
+        ${SOURCES_ROOT}/source/cli.c
+        ${SOURCES_ROOT}/source/module.c
+        ${SOURCES_ROOT}/source/utils.c)
 
 add_executable(wasmc ${SOURCES})
