@@ -53,6 +53,50 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                 pos += slen;
                 break;
             }
+            case TypeID: {
+                // 解析类型段
+                // 即解析模块中所有函数类型（也叫函数签名或函数原型）
+                // 函数原型示例：(a, b, ...) -> (x, y, ...)
+                // 类型段编码格式如下：
+                // type_sec: 0x01|byte_count|vec<func_type>
+
+                // 读取类型段中所有函数类型的数量
+                m->type_count = read_LEB_unsigned(bytes, &pos, 32);
+
+                // 为存储类型段中的函数类型申请内存
+                m->types = acalloc(m->type_count, sizeof(Type), "Module->types");
+
+                // 遍历解析每个类型 func_type，其编码格式如下：
+                // func_type: 0x60|param_count|(param_val)+|return_count|(return_val)+
+                for (uint32_t i = 0; i < m->type_count; i++) {
+                    Type *type = &m->types[i];
+
+                    // 函数标记值 FtTag（即 0x60），暂时忽略
+                    read_LEB_unsigned(bytes, &pos, 7);
+
+                    // 解析函数参数个数
+                    type->param_count = read_LEB_unsigned(bytes, &pos, 32);
+                    type->params = acalloc(type->param_count, sizeof(uint32_t),
+                                           "type->params");
+                    // 解析函数每个参数的类型
+                    for (uint32_t p = 0; p < type->param_count; p++) {
+                        type->params[p] = read_LEB_unsigned(bytes, &pos, 32);
+                    }
+
+                    // 解析函数返回值个数
+                    type->result_count = read_LEB_unsigned(bytes, &pos, 32);
+                    type->results = acalloc(type->result_count, sizeof(uint32_t),
+                                            "type->results");
+                    // 解析函数每个返回值的类型
+                    for (uint32_t r = 0; r < type->result_count; r++) {
+                        type->results[r] = read_LEB_unsigned(bytes, &pos, 32);
+                    }
+
+                    // 基于函数类型计算的唯一掩码值
+                    type->mask = get_type_mask(type);
+                }
+                break;
+            }
             default: {
                 pos += slen;
                 // 如果不是上面 0 到 11 ID，则报错
