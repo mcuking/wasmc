@@ -2,6 +2,7 @@
 #include "utils.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 // 解析 Wasm 二进制文件内容，将其转化成内存格式 Module，以便后续虚拟机基于此执行对应指令
 struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
@@ -94,6 +95,39 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
 
                     // 基于函数类型计算的唯一掩码值
                     type->mask = get_type_mask(type);
+                }
+                break;
+            }
+            case FuncID: {
+                // 解析函数段
+                // 函数段列出了内部函数的函数类型在所有函数类型中的索引，函数的局部变量和字节码则存在代码段中
+                // 编码格式如下：
+                // func_sec: 0x03|byte_count|vec<type_idx>
+
+                // 读取函数段所有函数的数量
+                m->function_count += read_LEB_unsigned(bytes, &pos, 32);
+
+                // 为存储函数段中的所有函数申请内存
+                Block *functions;
+                functions = acalloc(m->function_count, sizeof(Block), "Block(function)");
+
+                // 由于解析了导入段在解析函数段之前，而导入段中可能有导入外部模块函数
+                // 因此如果 m->import_func_count 不为 0，则说明已导入外部函数，并存储在了 m->functions 中
+                // 所以需要先将存储在了 m->functions 中的导入函数对应数据拷贝到 functions 中
+                // 简单来说，就是先将之前解析导入函数所得到的数据，拷贝到新申请的内存中（因为之前申请的内存已不足以存储所有函数的数据）
+                if (m->import_func_count != 0) {
+                    memcpy(functions, m->functions, sizeof(Block) * m->import_func_count);
+                }
+                m->functions = functions;
+
+                // 遍历每个函数项，读取其对应的函数类型在所有函数类型中的索引，并根据索引获取到函数类型
+                for (uint32_t f = m->import_func_count; f < m->function_count; f++) {
+                    // f 为该函数在所有函数（包括导入函数）中的索引
+                    m->functions[f].fidx = f;
+                    // tidx 为该内部函数的函数类型在所有函数类型中的索引
+                    uint32_t tidx = read_LEB_unsigned(bytes, &pos, 32);
+                    // 通过索引 tidx 从所有函数类型中获取到具体的函数类型
+                    m->functions[f].type = &m->types[tidx];
                 }
                 break;
             }
