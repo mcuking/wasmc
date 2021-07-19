@@ -1,6 +1,7 @@
 #ifndef WASMC_UTILS_H
 #define WASMC_UTILS_H
 
+#include "module.h"
 #include <stdlib.h>
 
 // 报错
@@ -29,5 +30,8 @@ uint64_t read_LEB_signed(const uint8_t *bytes, uint32_t *pos, uint32_t maxbits);
 
 // 申请内存
 void *acalloc(size_t nmemb, size_t size, char *name);
+
+// 基于函数类型计算唯一的掩码值
+uint64_t get_type_mask(Type *type);
 
 #endif

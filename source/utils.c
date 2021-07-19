@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "module.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,4 +71,19 @@ void *acalloc(size_t nmemb, size_t size, char *name) {
         FATAL("Could not allocate %lu bytes for %s", nmemb * size, name)
     }
     return res;
+}
+
+// 基于函数类型计算唯一的掩码值
+uint64_t get_type_mask(Type *type) {
+    uint64_t mask = 0x80;
+
+    if (type->result_count == 1) {
+        mask |= 0x80 - type->results[0];
+    }
+    mask = mask << 4;
+    for (uint32_t p = 0; p < type->param_count; p++) {
+        mask = ((uint64_t) mask) << 4;
+        mask |= 0x80 - type->params[p];
+    }
+    return mask;
 }

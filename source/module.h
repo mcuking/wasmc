@@ -22,10 +22,22 @@ typedef enum {
     DataID   //数据段 ID
 } SecID;
 
+// 函数类型（或称函数签名）
+typedef struct Type {
+    uint32_t param_count; // 函数的参数数量
+    uint32_t *params;     // 函数的参数类型集合
+    uint32_t result_count;// 函数的返回值数量
+    uint32_t *results;    // 函数的返回值类型集合
+    uint64_t mask;        // 基于函数类型计算的唯一掩码值
+} Type;
+
 // Wasm 内存格式对应的结构体
 typedef struct Module {
     const uint8_t *bytes;// 用于存储 Wasm 二进制模块的内容
     uint32_t byte_count; // Wasm 二进制模块的字节数
+
+    Type *types;        // 用于存储模块中所有函数类型
+    uint32_t type_count;// 模块中所有函数类型的数量
 } Module;
 
 // 解析 Wasm 二进制文件内容，将其转化成内存格式 Module
