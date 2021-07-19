@@ -1,6 +1,8 @@
 #ifndef WASMC_UTILS_H
 #define WASMC_UTILS_H
 
+#include <stdlib.h>
+
 // 报错
 #define FATAL(...)                                             \
     {                                                          \

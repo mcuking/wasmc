@@ -1,6 +1,6 @@
-#include <stdlib.h>
-#include <stdio.h>
 #include "utils.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 // 申请内存
 void *acalloc(size_t nmemb, size_t size, char *name) {
