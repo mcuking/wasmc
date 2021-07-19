@@ -21,6 +21,12 @@
         }                                                                   \
     }
 
+// 解码针对无符号整数的 LEB128 编码
+uint64_t read_LEB_unsigned(const uint8_t *bytes, uint32_t *pos, uint32_t maxbits);
+
+// 解码针对有符号整数的 LEB128 编码
+uint64_t read_LEB_signed(const uint8_t *bytes, uint32_t *pos, uint32_t maxbits);
+
 // 申请内存
 void *acalloc(size_t nmemb, size_t size, char *name);
 
