@@ -1,10 +1,17 @@
 #ifndef WASMC_MODULE_H
 #define WASMC_MODULE_H
 
+#include <stdlib.h>
+
 #define WA_MAGIC 0x6d736100
 #define WA_VERSION 0x01
 
-#include <stdlib.h>
+#define I32 0x7f     // -0x01
+#define I64 0x7e     // -0x02
+#define F32 0x7d     // -0x03
+#define F64 0x7c     // -0x04
+#define ANYFUNC 0x70 // -0x10
+#define BLOCK 0x40   // -0x40
 
 // 段 ID 的枚举
 typedef enum {
@@ -40,6 +47,15 @@ typedef struct Block {
     uint32_t *locals;    // 用于存储局部变量的值（仅针对控制块类型为函数的情况）
 } Block;
 
+// 表对应的结构体
+typedef struct Table {
+    uint8_t elem_type;// 表中元素的类型（必须为函数引用，编码为 0x70）
+    uint32_t min_size;// 表的元素数量限制下限
+    uint32_t max_size;// 表的元素数量限制上限
+    uint32_t cur_size;// 表的当前元素数量
+    uint32_t *entries;// 用于存储表中的元素
+} Table;
+
 // Wasm 内存格式对应的结构体
 typedef struct Module {
     const uint8_t *bytes;// 用于存储 Wasm 二进制模块的内容
@@ -51,6 +67,8 @@ typedef struct Module {
     uint32_t import_func_count;// 导入函数的数量
     uint32_t function_count;   // 所有函数的数量（包括导入函数）
     Block *functions;          // 用于存储模块中所有函数（包括导入函数和模块内定义函数）
+
+    Table table;// 表
 } Module;
 
 // 解析 Wasm 二进制文件内容，将其转化成内存格式 Module
