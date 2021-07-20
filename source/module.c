@@ -76,6 +76,9 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
     m->bytes = bytes;
     m->byte_count = byte_count;
 
+    // 起始函数索引初始值设置为 -1
+    m->start_function = -1;
+
     // 首先读取魔数(magic number)，检查是否正确
     // 注：和其他很多二进制文件（例如 Java 类文件）一样，Wasm 也同样使用魔数来标记其二进制文件类型
     // 所谓魔数，你可以简单地将它理解为具有特定含义的一串数字
@@ -119,6 +122,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                 // 解析类型段
                 // 即解析模块中所有函数类型（也叫函数签名或函数原型）
                 // 函数原型示例：(a, b, ...) -> (x, y, ...)
+
                 // 类型段编码格式如下：
                 // type_sec: 0x01|byte_count|vec<func_type>
 
@@ -162,6 +166,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
             case FuncID: {
                 // 解析函数段
                 // 函数段列出了内部函数的函数类型在所有函数类型中的索引，函数的局部变量和字节码则存在代码段中
+
                 // 函数段编码格式如下：
                 // func_sec: 0x03|byte_count|vec<type_idx>
 
@@ -198,6 +203,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                 // 通过为 Wasm 框架提供一种能安全映射对象的方式，表段可以为 Wasm 提供一部分代码安全性
                 // 当代码想要访问表段中引用的数据时，它要向 Wasm 框架请求变种特定索引处的条目，
                 // 然后 Wasm 框架会读取存储在这个索引处的地址，并执行相关动作
+
                 // 表段和表项编码格式如下：
                 // table_sec: 0x04|byte_count|vec<table_type> # vec 目前长度只能是 1
                 // table_type: 0x70|limits
@@ -222,6 +228,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                 // 模块的内存被定义为 Wasm 页，每页 64KB。当环境指定 Wasm 模块可以使用多少内存时，指定的是初始页数，
                 // 可能还有一个最大页数。如果模块需要更多内存，可以请求内存增长指定页数。如果指定了最大页数，则框架会防止内存增长超过这一点
                 // 如果没有指定最大页数，则内存可以无限增长
+
                 // 内存段和内存类型编码格式如下：
                 // mem_sec: 0x05|byte_count|vec<mem_type> # vec 目前长度只能是 1
                 // mem_type: limits
@@ -243,6 +250,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                 // 解析全局段
                 // 全局段列出了模块内定义的所有全局变量
                 // 每一项包括全局变量的类型（值类型和可变性）以及初始值
+
                 // 全局段和全局项的编码格式如下：
                 // global_sec: 0x60|byte_count|vec<global>
                 // global: global_type|init_expr
@@ -277,6 +285,19 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                     // TODO: 设置当前全局变量的初始值，需要执行表达式 init_expr 对应的字节码指令，来获得初始值，要等到虚拟机完成后才可实现
                 }
                 pos = start_pos + slen;
+                break;
+            }
+            case StartID: {
+                // 解析起始段
+                // 起始段记录了起始函数索引，而起始函数是在【模块完成初始化后】，【被导出函数可调用之前】自动被调用的函数
+                // 可以将起始函数视为一种初始化全局变量或内存的函数，且函数必须处于被模块内部，不能是从外部导入的
+                // 起始函数的作用有两个：
+                // 1. 在模块加载后进行初始化工作
+                // 2. 将模块变成可执行文件
+
+                // 起始段的编码格式如下：
+                // start_sec: 0x08|byte_count|func_idx
+                m->start_function = read_LEB_unsigned(bytes, &pos, 32);
                 break;
             }
             default: {
