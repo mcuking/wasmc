@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /*
  * LEB128（Little Endian Base 128） 变长编码格式目的是节约空间
@@ -70,6 +71,18 @@ void *acalloc(size_t nmemb, size_t size, char *name) {
     if (res == NULL) {
         FATAL("Could not allocate %lu bytes for %s", nmemb * size, name)
     }
+    return res;
+}
+
+// 在原有内存基础上重新申请内存
+void *arecalloc(void *ptr, size_t old_nmemb, size_t nmemb, size_t size, char *name) {
+    // 重新分配内存
+    void *res = realloc(ptr, nmemb * size);
+    if (res == NULL) {
+        FATAL("Could not allocate %lu bytes for %s", nmemb * size, name);
+    }
+    // 将新申请的内存中的前面部分--即为新数据准备的内存空间，用 0 进行初始化
+    memset(res + old_nmemb * size, 0, (nmemb - old_nmemb) * size);
     return res;
 }
 

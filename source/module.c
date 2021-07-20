@@ -105,6 +105,9 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
         // 紧跟在段 ID 后面的 4 个字节用于记录该段所占字节总长度
         uint32_t slen = read_LEB_unsigned(bytes, &pos, 32);
 
+        // 每次解析某个段的数据时，先将当前解析到的位置保存起来，以便后续使用
+        uint32_t start_pos = pos;
+
         switch (id) {
             case CustomID: {
                 // 解析自定义段
@@ -159,7 +162,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
             case FuncID: {
                 // 解析函数段
                 // 函数段列出了内部函数的函数类型在所有函数类型中的索引，函数的局部变量和字节码则存在代码段中
-                // 编码格式如下：
+                // 函数段编码格式如下：
                 // func_sec: 0x03|byte_count|vec<type_idx>
 
                 // 读取函数段所有函数的数量
@@ -195,7 +198,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                 // 通过为 Wasm 框架提供一种能安全映射对象的方式，表段可以为 Wasm 提供一部分代码安全性
                 // 当代码想要访问表段中引用的数据时，它要向 Wasm 框架请求变种特定索引处的条目，
                 // 然后 Wasm 框架会读取存储在这个索引处的地址，并执行相关动作
-                // 编码格式如下：
+                // 表段和表项编码格式如下：
                 // table_sec: 0x04|byte_count|vec<table_type> # vec 目前长度只能是 1
                 // table_type: 0x70|limits
                 // limits: flags|min|(max)?
@@ -234,6 +237,46 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
 
                 // 为存储内存中的数据申请内存（在解析数据段时会用到--将数据段中的数据存储到刚申请的内存中）
                 m->memory.bytes = acalloc(m->memory.cur_size * PAGE_SIZE, sizeof(uint32_t), "Module->memory.bytes");
+                break;
+            }
+            case GlobalID: {
+                // 解析全局段
+                // 全局段列出了模块内定义的所有全局变量
+                // 每一项包括全局变量的类型（值类型和可变性）以及初始值
+                // 全局段和全局项的编码格式如下：
+                // global_sec: 0x60|byte_count|vec<global>
+                // global: global_type|init_expr
+                // global_type: val_type|mut
+                // init_expr: (byte)+|0x0B
+
+                // 读取模块中全局变量的数量
+                uint32_t global_count = read_LEB_unsigned(bytes, &pos, 32);
+
+                // 遍历全局段中的每一个全局变量项
+                for (uint32_t g = 0; g < global_count; g++) {
+                    // 先读取全局变量的值类型
+                    uint8_t type = read_LEB_unsigned(bytes, &pos, 7);
+
+                    // 再读取全局变量的可变性
+                    uint8_t mutability = read_LEB_unsigned(bytes, &pos, 1);
+                    // TODO: 可变性暂无用处，故先将变量 mutability 标记为无用
+                    (void)mutability;
+
+                    // 先保存当前全局变量的索引
+                    uint32_t gidx = m->global_count;
+
+                    // 全局变量数量加 1
+                    m->global_count += 1;
+
+                    // 由于新增一个全局变量，所以需要重新申请内存，调用 arecalloc 函数在原有内存基础上重新申请内存
+                    m->globals = arecalloc(m->globals, gidx, m->global_count, sizeof(StackValue), "globals");
+
+                    // 设置当前全局变量的值类型
+                    m->globals[gidx].value_type = type;
+
+                    // TODO: 设置当前全局变量的初始值，需要执行表达式 init_expr 对应的字节码指令，来获得初始值，要等到虚拟机完成后才可实现
+                }
+                pos = start_pos + slen;
                 break;
             }
             default: {
