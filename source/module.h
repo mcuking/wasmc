@@ -58,12 +58,26 @@ typedef struct Table {
     uint32_t *entries;// 用于存储表中的元素
 } Table;
 
+// 内存对应的结构体
 typedef struct Memory {
     uint32_t min_size;// 最小页数
     uint32_t max_size;// 最大页数
     uint32_t cur_size;// 当前页数
     uint8_t *bytes;   // 用于存储数据
 } Memory;
+
+// 全局变量值/操作数栈的值对应的结构体
+typedef struct StackValue {
+    uint8_t value_type;// 值类型
+    union {
+        uint32_t uint32;
+        int32_t int32;
+        uint64_t uint64;
+        int64_t int64;
+        float f32;
+        double f64;
+    } value;// 值
+} StackValue;
 
 // Wasm 内存格式对应的结构体
 typedef struct Module {
@@ -80,6 +94,9 @@ typedef struct Module {
     Table table;// 表
 
     Memory memory;// 内存
+
+    StackValue *globals;  // 用于存储全局变量的值
+    uint32_t global_count;// 全局变量的数量
 } Module;
 
 // 解析 Wasm 二进制文件内容，将其转化成内存格式 Module

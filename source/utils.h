@@ -31,6 +31,9 @@ uint64_t read_LEB_signed(const uint8_t *bytes, uint32_t *pos, uint32_t maxbits);
 // 申请内存
 void *acalloc(size_t nmemb, size_t size, char *name);
 
+// 在原有内存基础上重新申请内存
+void *arecalloc(void *ptr, size_t old_nmemb, size_t nmemb, size_t size, char *name);
+
 // 基于函数类型计算唯一的掩码值
 uint64_t get_type_mask(Type *type);
 
