@@ -3,15 +3,17 @@
 
 #include <stdlib.h>
 
-#define WA_MAGIC 0x6d736100
-#define WA_VERSION 0x01
+#define WA_MAGIC 0x6d736100// 魔数（magic number）
+#define WA_VERSION 0x01    // Wasm 标准的版本号
 
-#define I32 0x7f     // -0x01
-#define I64 0x7e     // -0x02
-#define F32 0x7d     // -0x03
-#define F64 0x7c     // -0x04
-#define ANYFUNC 0x70 // -0x10
-#define BLOCK 0x40   // -0x40
+#define PAGE_SIZE 0x10000// 65536(即 64 * 1024) 每页内存大小--64KB
+
+#define I32 0x7f    // -0x01
+#define I64 0x7e    // -0x02
+#define F32 0x7d    // -0x03
+#define F64 0x7c    // -0x04
+#define ANYFUNC 0x70// -0x10
+#define BLOCK 0x40  // -0x40
 
 // 段 ID 的枚举
 typedef enum {
@@ -56,6 +58,13 @@ typedef struct Table {
     uint32_t *entries;// 用于存储表中的元素
 } Table;
 
+typedef struct Memory {
+    uint32_t min_size;// 最小页数
+    uint32_t max_size;// 最大页数
+    uint32_t cur_size;// 当前页数
+    uint8_t *bytes;   // 用于存储数据
+} Memory;
+
 // Wasm 内存格式对应的结构体
 typedef struct Module {
     const uint8_t *bytes;// 用于存储 Wasm 二进制模块的内容
@@ -69,6 +78,8 @@ typedef struct Module {
     Block *functions;          // 用于存储模块中所有函数（包括导入函数和模块内定义函数）
 
     Table table;// 表
+
+    Memory memory;// 内存
 } Module;
 
 // 解析 Wasm 二进制文件内容，将其转化成内存格式 Module

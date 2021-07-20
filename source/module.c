@@ -9,12 +9,13 @@
 // 表 table_type 编码如下：
 // table_type: 0x70|limits
 // limits: flags|min|(max)?
-// 注：之所以要封装成独立函数，是因为在 load_module 函数中有两次调用：1.解析本地定义的表段；2. 解析从外部导入的表段
+// 注：之所以要封装成独立函数，是因为在 load_module 函数中有两次调用：1.解析本地定义的表段；2. 解析从外部导入的表
 void parse_table_type(Module *m, uint32_t *pos) {
     // 由于表段中只会有一张表，所以无需遍历
+
     // 表中的元素必需为函数引用，所以编码必需为 0x70
     m->table.elem_type = read_LEB_unsigned(m->bytes, pos, 7);
-    ASSERT(m->table.elem_type == ANYFUNC, "Table elem_type 0x%x unsupported", m->table.elem_type);
+    ASSERT(m->table.elem_type == ANYFUNC, "Table elem_type 0x%x unsupported", m->table.elem_type)
 
     // flags 为标记位，如果为 0 表示只需指定表中元素数量下限；为 1 表示既要指定表中元素数量的上限，又指定表中元素数量的下限
     uint32_t flags = read_LEB_unsigned(m->bytes, pos, 32);
@@ -31,6 +32,33 @@ void parse_table_type(Module *m, uint32_t *pos) {
     } else {
         // flags 为 0，表示没有特别指定表的元素数量上限，所以设置为默认的 64K 即可
         m->table.max_size = 0x10000;
+    }
+}
+
+// 解析内存段中的内存 mem_type（目前内存段只会包含一块内存）
+// 内存 mem_type 编码如下：
+// mem_type: limits
+// limits: flags|min|(max)?
+// 注：之所以要封装成独立函数，是因为在 load_module 函数中有两次调用：1.解析本地定义的内存段；2. 解析从外部导入的内存
+void parse_memory_type(Module *m, uint32_t *pos) {
+    // 由于内存段中只会有一块内存，所以无需遍历
+
+    // flags 为标记位，如果为 0 表示只指定内存大小的下限；为 1 表示既指定内存大小的上限，又指定内存大小的下限
+    uint32_t flags = read_LEB_unsigned(m->bytes, pos, 32);
+    // 先读取内存大小的下限，并设置为该内存的初始大小
+    uint32_t pages = read_LEB_unsigned(m->bytes, pos, 32);
+    m->memory.min_size = pages;
+    m->memory.cur_size = pages;
+
+    // flags 为 1 表示既指定内存大小上限，又指定内存大小下限
+    if (flags & 0x1) {
+        // 读取内存大小上限
+        pages = read_LEB_unsigned(m->bytes, pos, 32);
+        // 内存大小最大上限为 2GB，如果读取的内存大小上限值超过 2GB，则默认设置 2GB，否则设置为读取的值即可
+        m->memory.max_size = (uint32_t) fmin(0x8000, pages);
+    } else {
+        // flags 为 0，表示没有特别指定内存大小上限，所以设置为默认的 2GB 即可
+        m->memory.max_size = 0x8000;
     }
 }
 
@@ -174,14 +202,38 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
 
                 // 读取表的数量
                 uint32_t table_count = read_LEB_unsigned(bytes, &pos, 32);
-                // 模块最多只能定义一张表，因此 table_count 需为 1
-                ASSERT(table_count == 1, "More than 1 table not supported");
+                // 模块最多只能定义一张表，因此 table_count 必需为 1
+                ASSERT(table_count == 1, "More than 1 table not supported")
 
-                // 解析表段中的表 table_type（目前表只会包含一张表）
+                // 解析表段中的表 table_type（目前模块只会包含一张表）
                 parse_table_type(m, &pos);
 
-                // 为存储表中的元素申请内存（在解析元素段时会用到--将元素段中的索引设置到刚申请的内存中）
+                // 为存储表中的元素申请内存（在解析元素段时会用到--将元素段中的索引存储到刚申请的内存中）
                 m->table.entries = acalloc(m->table.cur_size, sizeof(uint32_t), "Module->table.entries");
+                break;
+            }
+            case MemID: {
+                // 解析内存段
+                // 内存段列出了模块内定义的内存，由于 Wasm 模块不能直接访问设备内存，
+                // 实例化模块的环境传入一个 ArrayBuffer，Wasm 模块示例将其用作线性内存。
+                // 模块的内存被定义为 Wasm 页，每页 64KB。当环境指定 Wasm 模块可以使用多少内存时，指定的是初始页数，
+                // 可能还有一个最大页数。如果模块需要更多内存，可以请求内存增长指定页数。如果指定了最大页数，则框架会防止内存增长超过这一点
+                // 如果没有指定最大页数，则内存可以无限增长
+                // 内存段和内存类型编码格式如下：
+                // mem_sec: 0x05|byte_count|vec<mem_type> # vec 目前长度只能是 1
+                // mem_type: limits
+                // limits: flags|min|(max)?
+
+                // 读取内存的数量
+                uint32_t memory_count = read_LEB_unsigned(bytes, &pos, 32);
+                // 模块最多只能定义一块内存，因此 memory_count 必需为 1
+                ASSERT(memory_count == 1, "More than 1 memory not supported\n")
+
+                // 解析内存段中内存 mem_type（目前模块只会包含一块内存）
+                parse_memory_type(m, &pos);
+
+                // 为存储内存中的数据申请内存（在解析数据段时会用到--将数据段中的数据存储到刚申请的内存中）
+                m->memory.bytes = acalloc(m->memory.cur_size * PAGE_SIZE, sizeof(uint32_t), "Module->memory.bytes");
                 break;
             }
             default: {
