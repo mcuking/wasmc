@@ -1,8 +1,38 @@
 #include "module.h"
 #include "utils.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+// 解析表段中的表 table_type（目前表段只会包含一张表）
+// 表 table_type 编码如下：
+// table_type: 0x70|limits
+// limits: flags|min|(max)?
+// 注：之所以要封装成独立函数，是因为在 load_module 函数中有两次调用：1.解析本地定义的表段；2. 解析从外部导入的表段
+void parse_table_type(Module *m, uint32_t *pos) {
+    // 由于表段中只会有一张表，所以无需遍历
+    // 表中的元素必需为函数引用，所以编码必需为 0x70
+    m->table.elem_type = read_LEB_unsigned(m->bytes, pos, 7);
+    ASSERT(m->table.elem_type == ANYFUNC, "Table elem_type 0x%x unsupported", m->table.elem_type);
+
+    // flags 为标记位，如果为 0 表示只需指定表中元素数量下限；为 1 表示既要指定表中元素数量的上限，又指定表中元素数量的下限
+    uint32_t flags = read_LEB_unsigned(m->bytes, pos, 32);
+    // 先读取表中元素数量下限，同时设置为该表的当前元素数量
+    uint32_t tsize = read_LEB_unsigned(m->bytes, pos, 32);
+    m->table.min_size = tsize;
+    m->table.cur_size = tsize;
+    // flags 为 1 表示既要指定表中元素数量的上限，又指定表中元素数量的下限
+    if (flags & 0x1) {
+        // 读取表中元素数量的上限
+        tsize = read_LEB_unsigned(m->bytes, pos, 32);
+        // 表的元素数量最大上限为 64K，如果读取的表的元素数量上限值超过 64K，则默认设置 64K，否则设置为读取的值即可
+        m->table.max_size = (uint32_t) fmin(0x10000, tsize);
+    } else {
+        // flags 为 0，表示没有特别指定表的元素数量上限，所以设置为默认的 64K 即可
+        m->table.max_size = 0x10000;
+    }
+}
 
 // 解析 Wasm 二进制文件内容，将其转化成内存格式 Module，以便后续虚拟机基于此执行对应指令
 struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
@@ -131,7 +161,31 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                 }
                 break;
             }
+            case TableID: {
+                // 解析表段
+                // 表段持有一个带有类型的引用数组，比如像函数这种无法作为原始字节存储在模块线性内存中的项目
+                // 通过为 Wasm 框架提供一种能安全映射对象的方式，表段可以为 Wasm 提供一部分代码安全性
+                // 当代码想要访问表段中引用的数据时，它要向 Wasm 框架请求变种特定索引处的条目，
+                // 然后 Wasm 框架会读取存储在这个索引处的地址，并执行相关动作
+                // 编码格式如下：
+                // table_sec: 0x04|byte_count|vec<table_type> # vec 目前长度只能是 1
+                // table_type: 0x70|limits
+                // limits: flags|min|(max)?
+
+                // 读取表的数量
+                uint32_t table_count = read_LEB_unsigned(bytes, &pos, 32);
+                // 模块最多只能定义一张表，因此 table_count 需为 1
+                ASSERT(table_count == 1, "More than 1 table not supported");
+
+                // 解析表段中的表 table_type（目前表只会包含一张表）
+                parse_table_type(m, &pos);
+
+                // 为存储表中的元素申请内存（在解析元素段时会用到--将元素段中的索引设置到刚申请的内存中）
+                m->table.entries = acalloc(m->table.cur_size, sizeof(uint32_t), "Module->table.entries");
+                break;
+            }
             default: {
+                // 如果没有匹配到任何段，则只需 pos 增加相应值即可
                 pos += slen;
                 // 如果不是上面 0 到 11 ID，则报错
                 FATAL("Section %d unimplemented\n", id)
