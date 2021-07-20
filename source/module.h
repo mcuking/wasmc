@@ -97,6 +97,8 @@ typedef struct Module {
 
     StackValue *globals;  // 用于存储全局变量的值
     uint32_t global_count;// 全局变量的数量
+
+    uint32_t start_function;
 } Module;
 
 // 解析 Wasm 二进制文件内容，将其转化成内存格式 Module
