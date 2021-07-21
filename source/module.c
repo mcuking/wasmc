@@ -312,13 +312,14 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                 // 读取元素数量
                 uint32_t elem_count = read_LEB_unsigned(bytes, &pos, 32);
 
+                // 依次对表中每个元素进行初始化
                 for (uint32_t c = 0; c < elem_count; c++) {
                     // 读取表索引 table_idx（即初始化哪张表）
                     uint32_t index = read_LEB_unsigned(bytes, &pos, 32);
                     // 目前 WASM 版本规定一个模块只能定义一张表，所以 index 只能为 0
                     ASSERT(index == 0, "Only 1 default table in MVP")
 
-                    // TODO: 设置表内偏移量（从哪开始初始化），需要执行表达式 init_expr 对应的字节码指令，来获得偏移量，要等到虚拟机完成后才可实现
+                    // TODO: 设置表内偏移量（从哪开始初始化），需要执行表达式 offset_expr 对应的字节码指令，来获得偏移量，要等到虚拟机完成后才可实现
 
                     // 暂时设置为 0
                     uint32_t offset = 0;
@@ -331,6 +332,39 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                     }
                 }
                 pos = start_pos + slen;
+                break;
+            }
+            case DataID: {
+                // 解析数据段
+                // 数据段用于存放内存的初始化数据
+                // 元素项包含三部分：1.内存索引（初始化哪块内存）2. 内存偏移量（从哪里开始初始化）3. 初始化数据
+
+                // 数据段编码格式如下：
+                // data_sec: 0x09|byte_count|vec<data>
+                // data: mem_idx|offset_expr|vec<byte>
+
+                // 读取数据数量
+                uint32_t mem_count = read_LEB_unsigned(bytes, &pos, 32);
+
+                // 依次对内存中每个部分进行初始化
+                for (uint32_t s = 0; s < mem_count; s++) {
+                    // 读取内存索引 mem_idx（即初始化哪块内存）
+                    uint32_t index = read_LEB_unsigned(bytes, &pos, 32);
+                    // 目前 WASM 版本规定一个模块只能定义一块内存，所以 index 只能为 0
+                    ASSERT(index == 0, "Only 1 default memory in MVP");
+
+                    // TODO: 设置内存偏移量（从哪开始初始化），需要执行表达式 offset_expr 对应的字节码指令，来获得偏移量，要等到虚拟机完成后才可实现
+
+                    // 暂时设置为 0
+                    uint32_t offset = 0;
+
+                    // 读取初始化数据所占内存大小
+                    uint32_t size = read_LEB_unsigned(bytes, &pos, 32);
+
+                    // 将写在二进制文件中的初始化数据拷贝到指定偏移量的内存中
+                    memcpy(m->memory.bytes + offset, bytes + pos, size);
+                    pos += size;
+                }
                 break;
             }
             default: {
