@@ -300,6 +300,39 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                 m->start_function = read_LEB_unsigned(bytes, &pos, 32);
                 break;
             }
+            case ElemID: {
+                // 解析元素段
+                // 元素段用于存放表初始化数据
+                // 元素项包含三部分：1.表索引（初始化哪张表）2.表内偏移量（从哪开始初始化） 3. 函数索引列表（给定的初始化数据）
+
+                // 元素段编码格式如下：
+                // elem_sec: 0x09|byte_count|vec<elem>
+                // elem: table_idx|offset_expr|vec<func_id>
+
+                // 读取元素数量
+                uint32_t elem_count = read_LEB_unsigned(bytes, &pos, 32);
+
+                for (uint32_t c = 0; c < elem_count; c++) {
+                    // 读取表索引 table_idx（即初始化哪张表）
+                    uint32_t index = read_LEB_unsigned(bytes, &pos, 32);
+                    // 目前 WASM 版本规定一个模块只能定义一张表，所以 index 只能为 0
+                    ASSERT(index == 0, "Only 1 default table in MVP")
+
+                    // TODO: 设置表内偏移量（从哪开始初始化），需要执行表达式 init_expr 对应的字节码指令，来获得偏移量，要等到虚拟机完成后才可实现
+
+                    // 暂时设置为 0
+                    uint32_t offset = 0;
+
+                    // 函数索引列表（即给定的元素初始化数据）
+                    uint32_t num_elem = read_LEB_unsigned(bytes, &pos, 32);
+                    // 遍历函数索引列表，将列表中的函数索引设置为元素的初始值
+                    for (uint32_t n = 0; n < num_elem; n++) {
+                        m->table.entries[offset + n] = read_LEB_unsigned(bytes, &pos, 32);
+                    }
+                }
+                pos = start_pos + slen;
+                break;
+            }
             default: {
                 // 如果没有匹配到任何段，则只需 pos 增加相应值即可
                 pos += slen;
