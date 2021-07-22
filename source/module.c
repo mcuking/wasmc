@@ -268,7 +268,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                     // 再读取全局变量的可变性
                     uint8_t mutability = read_LEB_unsigned(bytes, &pos, 1);
                     // TODO: 可变性暂无用处，故先将变量 mutability 标记为无用
-                    (void)mutability;
+                    (void) mutability;
 
                     // 先保存当前全局变量的索引
                     uint32_t gidx = m->global_count;
@@ -285,6 +285,73 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                     // TODO: 设置当前全局变量的初始值，需要执行表达式 init_expr 对应的字节码指令，来获得初始值，要等到虚拟机完成后才可实现
                 }
                 pos = start_pos + slen;
+                break;
+            }
+            case ExportID: {
+                // 解析导出段
+                // 导出段包含模块所有导出成员，主要包含四种：函数、表、内存、全局变量
+                // 导出项主要包括两个：1.导出成员名  2.导出描述：1 个字节的类型（0-函数、1-表、2-内存、3-全局变量）+ 导出项在相应段中的索引
+
+                // 导出段编码格式如下：
+                // export_sec: 0x07|byte_count|vec<export>
+                // export: name|export_desc
+                // export_desc: tag|[func_idx, table_idx, mem_idx, global_idx]
+
+                // 读取导出项数量
+                uint32_t export_count = read_LEB_unsigned(bytes, &pos, 32);
+
+                // 遍历所有导出项，解析对应数据
+                for (uint32_t e = 0; e < export_count; e++) {
+                    // 读取导出成员名
+                    char *name = read_string(bytes, &pos, NULL);
+
+                    // 读取导出类型
+                    uint32_t external_kind = bytes[pos++];
+
+                    // 读取导出项在相应段中的索引
+                    uint32_t index = read_LEB_unsigned(bytes, &pos, 32);
+
+                    // 先保存当前导出项的索引
+                    uint32_t eidx = m->export_count;
+
+                    // 导出项数量加 1
+                    m->export_count += 1;
+
+                    // 由于新增一个导出项，所以需要重新申请内存，调用 arecalloc 函数在原有内存基础上重新申请内存
+                    m->exports = arecalloc(m->exports, eidx, m->export_count, sizeof(Export), "exports");
+
+                    // 设置导出项的成员名
+                    m->exports[eidx].export_name = name;
+
+                    // 设置导出项的类型
+                    m->exports[eidx].external_kind = external_kind;
+
+                    // 根据导出项的类型，设置导出项的值
+                    switch (external_kind) {
+                        case KIND_FUNCTION:
+                            // 获取函数并赋给导出项
+                            m->exports[eidx].value = &m->functions[index];
+                            break;
+                        case KIND_TABLE:
+                            // 目前 WASM 版本规定只能定义一张表，所以索引只能为 0
+                            ASSERT(index == 0, "Only 1 table in MVP");
+                            // 获取模块内定义的表并赋给导出项
+                            m->exports[eidx].value = &m->table;
+                            break;
+                        case KIND_MEMORY:
+                            // 目前 WASM 版本规定只能定义一个内存，所以索引只能为 0
+                            ASSERT(index == 0, "Only 1 memory in MVP");
+                            // 获取模块内定义的内存并赋给导出项
+                            m->exports[eidx].value = &m->memory;
+                            break;
+                        case KIND_GLOBAL:
+                            // 获取全局变量并赋给导出项
+                            m->exports[eidx].value = &m->globals[index];
+                            break;
+                        default:
+                            break;
+                    }
+                }
                 break;
             }
             case StartID: {
