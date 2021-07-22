@@ -333,13 +333,13 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                             m->exports[eidx].value = &m->functions[index];
                             break;
                         case KIND_TABLE:
-                            // 目前 WASM 版本规定只能定义一张表，所以索引只能为 0
+                            // 目前 Wasm 版本规定只能定义一张表，所以索引只能为 0
                             ASSERT(index == 0, "Only 1 table in MVP");
                             // 获取模块内定义的表并赋给导出项
                             m->exports[eidx].value = &m->table;
                             break;
                         case KIND_MEMORY:
-                            // 目前 WASM 版本规定只能定义一个内存，所以索引只能为 0
+                            // 目前 Wasm 版本规定只能定义一个内存，所以索引只能为 0
                             ASSERT(index == 0, "Only 1 memory in MVP");
                             // 获取模块内定义的内存并赋给导出项
                             m->exports[eidx].value = &m->memory;
@@ -383,7 +383,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                 for (uint32_t c = 0; c < elem_count; c++) {
                     // 读取表索引 table_idx（即初始化哪张表）
                     uint32_t index = read_LEB_unsigned(bytes, &pos, 32);
-                    // 目前 WASM 版本规定一个模块只能定义一张表，所以 index 只能为 0
+                    // 目前 Wasm 版本规定一个模块只能定义一张表，所以 index 只能为 0
                     ASSERT(index == 0, "Only 1 default table in MVP")
 
                     // TODO: 设置表内偏移量（从哪开始初始化），需要执行表达式 offset_expr 对应的字节码指令，来获得偏移量，要等到虚拟机完成后才可实现
@@ -399,6 +399,98 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                     }
                 }
                 pos = start_pos + slen;
+                break;
+            }
+            case CodeID: {
+                // 解析代码段
+                // 代码段用于存放函数的字节码和局部变量，是 Wasm 二进制模块的核心，其他段存放的都是辅助信息
+                // 为了节约空间，局部变量的信息是被压缩的：即连续多个相同类型的局部变量会被统一记录变量数量和类型
+
+                // 代码段编码格式如下：
+                // code_sec: 0xoA|byte_count|vec<code>
+                // code: byte_count|vec<locals>|expr
+                // locals: local_count|val_type
+
+                // 读取代码段中的代码项的数量
+                uint32_t code_count = read_LEB_unsigned(bytes, &pos, 32);
+
+                // 声明局部变量的值类型
+                uint8_t val_type;
+
+                // 遍历代码段中的每个代码项，解析对应数据
+                for (uint32_t c = 0; c < code_count; c++) {
+                    // 获取代码项
+                    Block *function = &m->functions[m->import_func_count + c];
+
+                    // 读取代码项所占字节数（暂用 4 个字节）
+                    uint32_t code_size = read_LEB_unsigned(bytes, &pos, 32);
+
+                    // 保存当前位置为代码项的起始位置（除去前面的表示代码项目长度的 4 字节）
+                    uint32_t payload_start = pos;
+
+                    // 读取 locals 数量（注：相同类型的局部变量算一个 locals）
+                    uint32_t local_count = read_LEB_unsigned(bytes, &pos, 32);
+
+                    uint32_t save_pos, tidx, lidx, lecount;
+
+                    // 接下来需要对局部变量的相关字节进行两次遍历，所以先保存当前位置，方便第二次遍历前恢复位置
+                    save_pos = pos;
+
+                    // 将代码项的局部变量数量初始化为 0
+                    function->local_count = 0;
+
+                    // 第一次遍历所有的 locals，目的是统计代码项的局部变量数量，将所有 locals 所包含的变量数量相加即可
+                    // 注：相同类型的局部变量算一个 locals
+                    for (uint32_t l = 0; l < local_count; l++) {
+                        // 读取单个 locals 所包含的变量数量
+                        lecount = read_LEB_unsigned(bytes, &pos, 32);
+
+                        // 累加 locals 所对应的局部变量的数量
+                        function->local_count += lecount;
+
+                        // 局部变量的数量后面接的是局部变量的类型，暂时不需要，标记为无用
+                        val_type = read_LEB_unsigned(bytes, &pos, 7);
+                        (void) val_type;
+                    }
+
+                    // 为保存函数局部变量的值类型的 function->locals 数组申请内存
+                    function->locals = acalloc(function->local_count, sizeof(uint32_t), "function->locals");
+
+                    // 恢复之前的位置，重新遍历所有的 locals
+                    pos = save_pos;
+
+                    // 将局部变量的索引初始化为 0
+                    lidx = 0;
+
+                    // 第二次遍历所有的 locals，目的是所有的代码项中所有的局部变量设置值类型
+                    for (uint32_t l = 0; l < local_count; l++) {
+                        // 读取单个 locals 所包含的变量数量
+                        lecount = read_LEB_unsigned(bytes, &pos, 32);
+
+                        // 读取单个 locals 的值类型
+                        val_type = read_LEB_unsigned(bytes, &pos, 7);
+
+                        // 为该 locals 所对应的每一个变量设置值类型（注：相同类型的局部变量算一个 locals）
+                        for (uint32_t n = 0; n < lecount; n++) {
+                            function->locals[lidx++] = val_type;
+                        }
+                    }
+
+                    // 在代码项中，紧跟在局部变量后面的就是代码项的字节码部分
+
+                    // 先读取单个代码项的字节码部分【起始地址】（即局部变量部分的后一个字节）
+                    function->start_addr = pos;
+
+                    // 然后读取单个代码项的字节码部分【结束地址】，同时作为字节码部分【跳转地址】
+                    function->end_addr = payload_start + code_size - 1;
+                    function->br_addr = function->end_addr;
+
+                    // 代码项的字节码部分必须以 0x0b 结尾
+                    ASSERT(bytes[function->end_addr] == 0x0b, "Code section did not end with 0x0b\n");
+
+                    // 更新当前的地址为当前代码项的【结束地址】（即代码项的字节码部分【结束地址】）加 1，以便遍历下一个代码项
+                    pos = function->end_addr + 1;
+                }
                 break;
             }
             case DataID: {
@@ -417,7 +509,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                 for (uint32_t s = 0; s < mem_count; s++) {
                     // 读取内存索引 mem_idx（即初始化哪块内存）
                     uint32_t index = read_LEB_unsigned(bytes, &pos, 32);
-                    // 目前 WASM 版本规定一个模块只能定义一块内存，所以 index 只能为 0
+                    // 目前 Wasm 版本规定一个模块只能定义一块内存，所以 index 只能为 0
                     ASSERT(index == 0, "Only 1 default memory in MVP");
 
                     // TODO: 设置内存偏移量（从哪开始初始化），需要执行表达式 offset_expr 对应的字节码指令，来获得偏移量，要等到虚拟机完成后才可实现

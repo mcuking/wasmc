@@ -48,11 +48,17 @@ typedef struct Type {
 
 // 控制块（包含函数）对应的结构体
 typedef struct Block {
-    uint8_t block_type;  // 控制块类型，0x00: function, 0x01: init_exp, 0x02: block, 0x03: loop, 0x04: if
-    uint32_t fidx;       // 函数在所有函数中的索引（仅针对控制块类型为函数的情况）
-    Type *type;          // 函数类型，注：用来描述所有类型的控制块的入参和出参，不仅限于函数类型的控制块
+    uint8_t block_type;// 控制块类型，0x00: function, 0x01: init_exp, 0x02: block, 0x03: loop, 0x04: if
+    uint32_t fidx;     // 函数在所有函数中的索引（仅针对控制块类型为函数的情况）
+    Type *type;        // 函数类型，注：用来描述所有类型的控制块的入参和出参，不仅限于函数类型的控制块
+
     uint32_t local_count;// 局部变量数量（仅针对控制块类型为函数的情况）
     uint32_t *locals;    // 用于存储局部变量的值（仅针对控制块类型为函数的情况）
+
+    uint32_t start_addr;// 控制块中字节码部分的【起始地址】
+    uint32_t end_addr;  // 控制块中字节码部分的【结束地址】
+    uint32_t else_addr; // 控制块中字节码部分的【else 地址】(仅针对控制块类型为 if 的情况)
+    uint32_t br_addr;   // 控制块中字节码部分的【跳转地址】
 } Block;
 
 // 表对应的结构体
