@@ -28,6 +28,10 @@ uint64_t read_LEB_unsigned(const uint8_t *bytes, uint32_t *pos, uint32_t maxbits
 // 解码针对有符号整数的 LEB128 编码
 uint64_t read_LEB_signed(const uint8_t *bytes, uint32_t *pos, uint32_t maxbits);
 
+// 从字节数组中读取字符串，其中字节数组的开头 4 个字节用于表示字符串的长度
+// 注：如果参数 result_len 不为 NULL，则会被赋值为字符串的长度
+char *read_string(const uint8_t *bytes, uint32_t *pos, uint32_t *result_len);
+
 // 申请内存
 void *acalloc(size_t nmemb, size_t size, char *name);
 

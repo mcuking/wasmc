@@ -15,10 +15,16 @@
 #define ANYFUNC 0x70// -0x10
 #define BLOCK 0x40  // -0x40
 
+// 导出项/导入项类型
+#define KIND_FUNCTION 0
+#define KIND_TABLE 1
+#define KIND_MEMORY 2
+#define KIND_GLOBAL 3
+
 // 段 ID 的枚举
 typedef enum {
     CustomID,// 自定义段 ID
-    TypeID,  //类型段 ID
+    TypeID,  // 类型段 ID
     ImportID,// 导入段 ID
     FuncID,  // 函数段 ID
     TableID, // 表段 ID
@@ -28,7 +34,7 @@ typedef enum {
     StartID, // 起始段 ID
     ElemID,  // 元素段 ID
     CodeID,  // 代码段 ID
-    DataID   //数据段 ID
+    DataID   // 数据段 ID
 } SecID;
 
 // 函数类型（或称函数签名）对应结构体
@@ -66,6 +72,13 @@ typedef struct Memory {
     uint8_t *bytes;   // 用于存储数据
 } Memory;
 
+// 导出项对应结构体
+typedef struct Export {
+    char *export_name;     // 导出项成员名
+    uint32_t external_kind;// 导出项类型（类型可以是函数/表/内存/全局变量）
+    void *value;           // 用于存储导出项的值
+} Export;
+
 // 全局变量值/操作数栈的值对应的结构体
 typedef struct StackValue {
     uint8_t value_type;// 值类型
@@ -95,8 +108,12 @@ typedef struct Module {
 
     Memory memory;// 内存
 
-    StackValue *globals;  // 用于存储全局变量的值
+    StackValue *globals;  // 用于存储全局变量的相关数据（值以及值类型等）
     uint32_t global_count;// 全局变量的数量
+
+    Export *exports;      // 用于存储导出项的相关数据（导出项的值、成员名以及类型等）
+    uint32_t export_count;// 导出项数量
+
 
     uint32_t start_function;
 } Module;

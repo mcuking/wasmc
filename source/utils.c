@@ -65,6 +65,26 @@ uint64_t read_LEB_signed(const uint8_t *bytes, uint32_t *pos, uint32_t maxbits) 
     return read_LEB(bytes, pos, maxbits, true);
 }
 
+// 从字节数组中读取字符串，其中字节数组的开头 4 个字节用于表示字符串的长度
+// 注：如果参数 result_len 不为 NULL，则会被赋值为字符串的长度
+char *read_string(const uint8_t *bytes, uint32_t *pos, uint32_t *result_len) {
+    // 读取字符串的长度
+    uint32_t str_len = read_LEB_unsigned(bytes, pos, 32);
+    // 为字符串申请内存
+    char *str = malloc(str_len + 1);
+    // 将字节数组的数据拷贝到字符串 str 中
+    memcpy(str, bytes + *pos, str_len);
+    // 字符串以字符 '\0' 结尾
+    str[str_len] = '\0';
+    // 字节数组位置增加相应字符串长度
+    *pos += str_len;
+    // 如果参数 result_len 不为 NULL，则会被赋值为字符串的长度
+    if (result_len) {
+        *result_len = str_len;
+    }
+    return str;
+}
+
 // 申请内存
 void *acalloc(size_t nmemb, size_t size, char *name) {
     void *res = calloc(nmemb, size);
