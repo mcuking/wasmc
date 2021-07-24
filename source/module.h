@@ -59,6 +59,10 @@ typedef struct Block {
     uint32_t end_addr;  // 控制块中字节码部分的【结束地址】
     uint32_t else_addr; // 控制块中字节码部分的【else 地址】(仅针对控制块类型为 if 的情况)
     uint32_t br_addr;   // 控制块中字节码部分的【跳转地址】
+
+    char *import_module;// 导入函数的导入模块名（仅针对从外部模块导入的函数）
+    char *import_field; // 导入函数的导入成员名（仅针对从外部模块导入的函数）
+    void *(*func_ptr)();// 导入函数的实际值（仅针对从外部模块导入的函数）
 } Block;
 
 // 表对应的结构体

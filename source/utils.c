@@ -1,5 +1,6 @@
 #include "utils.h"
 #include "module.h"
+#include <dlfcn.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -104,6 +105,34 @@ void *arecalloc(void *ptr, size_t old_nmemb, size_t nmemb, size_t size, char *na
     // 将新申请的内存中的前面部分--即为新数据准备的内存空间，用 0 进行初始化
     memset(res + old_nmemb * size, 0, (nmemb - old_nmemb) * size);
     return res;
+}
+
+// 查找动态库中的 symbol
+// 如果解析成功则返回 true
+// 如果解析失败则返回 false 并设置 err
+bool resolve_sym(char *filename, char *symbol, void **val, char **err) {
+    void *handle = NULL;
+    dlerror();
+
+    if (filename) {
+        handle = dlopen(filename, RTLD_LAZY);
+        if (!handle) {
+            *err = dlerror();
+            return false;
+        }
+    }
+
+    // 查找动态库中的 symbol
+    // 根据 动态链接库 操作句柄(handle)与符号(symbol)，返回符号对应的地址。使用这个函数不但可以获取函数地址，也可以获取变量地址。
+    // handle：由 dlopen 打开动态链接库后返回的指针；
+    // symbol：要求获取的函数或全局变量的名称。
+    // 返回值：指向函数的地址，供调用使用。
+    *val = dlsym(handle, symbol);
+
+    if ((*err = dlerror()) != NULL) {
+        return false;
+    }
+    return true;
 }
 
 // 基于函数类型计算唯一的掩码值

@@ -2,6 +2,7 @@
 #define WASMC_UTILS_H
 
 #include "module.h"
+#include <stdbool.h>
 #include <stdlib.h>
 
 // 报错
@@ -37,6 +38,11 @@ void *acalloc(size_t nmemb, size_t size, char *name);
 
 // 在原有内存基础上重新申请内存
 void *arecalloc(void *ptr, size_t old_nmemb, size_t nmemb, size_t size, char *name);
+
+// 查找动态库中的 symbol
+// 如果解析成功则返回 true
+// 如果解析失败则返回 false 并设置 err
+bool resolve_sym(char *filename, char *symbol, void **val, char **err);
 
 // 基于函数类型计算唯一的掩码值
 uint64_t get_type_mask(Type *type);
