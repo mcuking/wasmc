@@ -17,52 +17,90 @@ void skip_immediate(const uint8_t *bytes, uint32_t *pos) {
     *pos = *pos + 1;
     // 根据操作码类型，判断其有占多少位的立即数（或者没有立即数），并直接跳过该立即数
     switch (opcode) {
-        case MemorySize:
-        case MemoryGrow:
-            read_LEB_unsigned(bytes, pos, 1);
-            break;
-        case Br:
-        case BrIf:
-        case Call:
-        case LocalGet:
-        case LocalSet:
-        case LocalTee:
-        case GlobalGet:
-        case GlobalSet:
-        case I32Const:
-            read_LEB_unsigned(bytes, pos, 32);
-            break;
-        case CallIndirect:
-            read_LEB_unsigned(bytes, pos, 32);
-            read_LEB_unsigned(bytes, pos, 1);
-            break;
-        case I64Const:
-            read_LEB_unsigned(bytes, pos, 64);
-            break;
-        case F32Const:
-            *pos += 4;
-            break;
-        case F64Const:
-            *pos += 8;
-            break;
+        //
+        // 控制指令
+        //
         case Block_:
         case Loop:
         case If:
+            // Block_/Loop/If 指令的立即数有两部分，第一部分表示控制块的类型（占 1 个字节），
+            // 第二部分为子表达式（Block_/Loop 有一个子表达式，If 有两个子表达式）
+            // 注：子表达式无需跳过，因为 find_block 主要就是要从控制块的表达式（包括子表达式）收集控制块的相关信息
             read_LEB_unsigned(bytes, pos, 7);
             break;
-        case I32Load ... I64Store32:
-            read_LEB_unsigned(bytes, pos, 32);
+        case Br:
+        case BrIf:
+            // 跳转指令的立即数表示跳转的目标标签索引（占 4 个字节）
             read_LEB_unsigned(bytes, pos, 32);
             break;
         case BrTable:
+            // BrTable 指令的立即数是指定的 n+1 个跳转的目标标签索引（每个索引值占 4 个字节）
+            // 其中前 n 个目标标签索引构成一个索引表，最后 1 个标签索引为默认索引
+            // 最终跳转到哪一个目标标签索引，需要在运行期间才能决定
             count = read_LEB_unsigned(bytes, pos, 32);
             for (uint32_t i = 0; i < count; i++) {
                 read_LEB_unsigned(bytes, pos, 32);
             }
             read_LEB_unsigned(bytes, pos, 32);
             break;
+        case Call:
+            // Call 指令的立即数表示被调用函数的索引（占 4 个字节）
+            read_LEB_unsigned(bytes, pos, 32);
+            break;
+        case CallIndirect:
+            // CallIndirect 指令有两个立即数，第一个立即数表示被调用函数的类型索引（占 4 个字节），
+            // 第二个立即数为保留立即数（占 1 个比特位），暂无用途
+            read_LEB_unsigned(bytes, pos, 32);
+            read_LEB_unsigned(bytes, pos, 1);
+            break;
+
+        //
+        // 变量指令
+        //
+        case LocalGet:
+        case LocalSet:
+        case LocalTee:
+        case GlobalGet:
+        case GlobalSet:
+            // 变量指令的立即数用于表示全局/局部变量的索引（占 4 个字节）
+            read_LEB_unsigned(bytes, pos, 32);
+            break;
+
+        //
+        // 内存指令
+        //
+        case I32Load ... I64Store32:
+            // 内存加载/存储指令有两个立即数，第一个立即数表示内存偏移量（占 4 个字节），
+            // 第二个立即数表示对齐提示（占 4 个字节）
+            read_LEB_unsigned(bytes, pos, 32);
+            read_LEB_unsigned(bytes, pos, 32);
+            break;
+        case MemorySize:
+        case MemoryGrow:
+            // 内存大小/增加指令的立即数表示所操作的内存索引（占 1 个比特位）
+            // 由于当前 Wasm 规范规定一个模块最多只能导入或定义一块内存，所以目前必须为 0
+            read_LEB_unsigned(bytes, pos, 1);
+            break;
+        case I32Const:
+            // I32Const 指令的立即数表示 32 有符号整数（占 4 个字节）
+            read_LEB_unsigned(bytes, pos, 32);
+        case I64Const:
+            // F32Const 指令的立即数表示 64 有符号整数（占 8 个字节）
+            read_LEB_unsigned(bytes, pos, 64);
+            break;
+        case F32Const:
+            // F32Const 指令的立即数表示 32 位浮点数（占 4 个字节）
+            // 注：LEB128 编码仅针对整数，而该指令的立即数为浮点数，并没有被编码，而是直接写入到 Wasm 二进制文件中的
+            *pos += 4;
+            break;
+        case F64Const:
+            // F64Const 指令的立即数表示 64 位浮点数（占 8 个字节）
+            // 注：LEB128 编码仅针对整数，而该指令的立即数为浮点数，并没有被编码，而是直接写入到 Wasm 二进制文件中的
+            *pos += 8;
+            break;
         default:
             // 其他操作码没有立即数
+            // 注：Wasm 指令大部分指令均没有立即数
             break;
     }
 }
