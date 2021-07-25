@@ -126,7 +126,6 @@ typedef struct Module {
     Export *exports;      // 用于存储导出项的相关数据（导出项的值、成员名以及类型等）
     uint32_t export_count;// 导出项数量
 
-
     uint32_t start_function;// 起始函数在本地模块所有函数中索引，而起始函数是在【模块完成初始化后】，【被导出函数可调用之前】自动被调用的函数
 } Module;
 

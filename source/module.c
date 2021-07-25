@@ -1,4 +1,5 @@
 #include "module.h"
+#include "interpreter.h"
 #include "opcode.h"
 #include "utils.h"
 #include <math.h>
@@ -112,7 +113,7 @@ void find_blocks(Module *m) {
                     break;
                 case Else_:
                     // 如果当前控制块中存在操作码为 Else_ 的指令，则当前控制块的块类型必须为 If
-                    ASSERT(blockstack[top]->block_type == If, "else not matched with if")
+                    ASSERT(blockstack[top]->block_type == If, "else not matched with if\n")
 
                     // 将 Else_ 指令的下一条指令地址，设置为该控制块的 else_addr，即 else 分支对应的字节码的首地址，
                     // 便于后续虚拟机在执行指令时，根据条件跳转到 else 分支对应的字节码继续执行指令
@@ -125,7 +126,7 @@ void find_blocks(Module *m) {
                     }
 
                     // 如果执行了 End_ 指令，说明至少收集了一个控制块的相关信息，所以 top 不可能是初始值 -1，至少大于等于 0
-                    ASSERT(top >= 0, "blockstack underflow")
+                    ASSERT(top >= 0, "blockstack underflow\n")
 
                     // 从控制块栈栈弹出该控制块
                     block = blockstack[top--];
@@ -166,7 +167,7 @@ void parse_table_type(Module *m, uint32_t *pos) {
 
     // 表中的元素必需为函数引用，所以编码必需为 0x70
     m->table.elem_type = read_LEB_unsigned(m->bytes, pos, 7);
-    ASSERT(m->table.elem_type == ANYFUNC, "Table elem_type 0x%x unsupported", m->table.elem_type)
+    ASSERT(m->table.elem_type == ANYFUNC, "Table elem_type 0x%x unsupported\n", m->table.elem_type)
 
     // flags 为标记位，如果为 0 表示只需指定表中元素数量下限；为 1 表示既要指定表中元素数量的上限，又指定表中元素数量的下限
     uint32_t flags = read_LEB_unsigned(m->bytes, pos, 32);
@@ -532,7 +533,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                 // 读取表的数量
                 uint32_t table_count = read_LEB_unsigned(bytes, &pos, 32);
                 // 模块最多只能定义一张表，因此 table_count 必需为 1
-                ASSERT(table_count == 1, "More than 1 table not supported")
+                ASSERT(table_count == 1, "More than 1 table not supported\n")
 
                 // 解析表段中的表 table_type（目前模块只会包含一张表）
                 parse_table_type(m, &pos);
@@ -654,13 +655,13 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                             break;
                         case KIND_TABLE:
                             // 目前 Wasm 版本规定只能定义一张表，所以索引只能为 0
-                            ASSERT(index == 0, "Only 1 table in MVP")
+                            ASSERT(index == 0, "Only 1 table in MVP\n")
                             // 获取模块内定义的表并赋给导出项
                             m->exports[eidx].value = &m->table;
                             break;
                         case KIND_MEMORY:
                             // 目前 Wasm 版本规定只能定义一个内存，所以索引只能为 0
-                            ASSERT(index == 0, "Only 1 memory in MVP")
+                            ASSERT(index == 0, "Only 1 memory in MVP\n")
                             // 获取模块内定义的内存并赋给导出项
                             m->exports[eidx].value = &m->memory;
                             break;
@@ -704,7 +705,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                     // 读取表索引 table_idx（即初始化哪张表）
                     uint32_t index = read_LEB_unsigned(bytes, &pos, 32);
                     // 目前 Wasm 版本规定一个模块只能定义一张表，所以 index 只能为 0
-                    ASSERT(index == 0, "Only 1 default table in MVP")
+                    ASSERT(index == 0, "Only 1 default table in MVP\n")
 
                     // TODO: 设置表内偏移量（从哪开始初始化），需要执行表达式 offset_expr 对应的字节码指令，来获得偏移量，要等到虚拟机完成后才可实现
 
@@ -830,7 +831,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                     // 读取内存索引 mem_idx（即初始化哪块内存）
                     uint32_t index = read_LEB_unsigned(bytes, &pos, 32);
                     // 目前 Wasm 版本规定一个模块只能定义一块内存，所以 index 只能为 0
-                    ASSERT(index == 0, "Only 1 default memory in MVP")
+                    ASSERT(index == 0, "Only 1 default memory in MVP\n")
 
                     // TODO: 设置内存偏移量（从哪开始初始化），需要执行表达式 offset_expr 对应的字节码指令，来获得偏移量，要等到虚拟机完成后才可实现
 
@@ -858,6 +859,36 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
     // 收集所有本地模块定义的函数中 Block_/Loop/If 控制块的相关信息，例如起始地址、结束地址、跳转地址、控制块类型等，
     // 便于后续虚拟机解释执行指令时可以借助这些信息
     find_blocks(m);
+
+    // 起始函数 m->start_function 是在【模块完成初始化后】，【被导出函数可调用之前】自动被调用的函数
+    // 可以将起始函数视为一种初始化全局变量或内存的函数，且起始函数必须处于本地模块内部，不能是从外部导入的函数
+
+    // m->start_function 初始赋值为 -1
+    // 在解析 Wasm 二进制文件中的起始段时，start_function 会被赋值为起始段中保存的起始函数索引（在本地模块所有函数的索引）
+    // 所以 m->start_function 不为 -1，说明本地模块存在起始函数，
+    // 需要在本地模块已完成初始化后，且本地模块的导出函数被调用之前，执行本地模块的起始函数
+    if (m->start_function != -1) {
+        uint32_t fidx = m->start_function;
+        bool result;
+
+        // 起始函数必须处于本地模块内部，不能是从外部导入的函数
+        // 注：从外部模块导入的函数在本地模块的所有函数中的前部分，可参考上面解析 Wasm 二进制文件导入段中处理外部模块导入函数的逻辑
+        ASSERT(fidx >= m->import_func_count, "Start function should be local function of native module\n")
+
+        // 为调用索引为 fidx 的函数作准备，主要准备如下：
+        // 将函数参数和局部变量压入操作数栈，并将当前控制控制帧保存到控制栈中
+        // 且将函数的起始指令地址设置为 pc（program counter 程序计数器，用于记录下一条待执行指令的地址）
+        setup_call(m, fidx);
+
+        // 虚拟机执行起始函数的字节码中的指令
+        result = interpret(m);
+
+        // 虚拟机在执行起始函数的字节码中的指令，如果遇到错误会返回 false，否则顺利执行完成后会返回 true
+        // 如果为 false，则将运行时（虚拟机执行指令过程）收集的异常信息打印出来
+        if (!result) {
+            FATAL("Exception: %s\n", exception)
+        }
+    }
 
     return m;
 }
