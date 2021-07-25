@@ -6,7 +6,8 @@
 #define WA_MAGIC 0x6d736100// 魔数（magic number）
 #define WA_VERSION 0x01    // Wasm 标准的版本号
 
-#define PAGE_SIZE 0x10000// 65536(即 64 * 1024) 每页内存大小--64KB
+#define PAGE_SIZE 0x10000     // 每页内存的大小 65536，即 64 * 1024，也就是 64KB
+#define BLOCKSTACK_SIZE 0x1000// 控制块栈的容量 4096
 
 #define I32 0x7f    // -0x01
 #define I64 0x7e    // -0x02
@@ -113,6 +114,7 @@ typedef struct Module {
     uint32_t import_func_count;// 导入函数的数量
     uint32_t function_count;   // 所有函数的数量（包括导入函数）
     Block *functions;          // 用于存储模块中所有函数（包括导入函数和模块内定义函数）
+    Block **block_lookup;      // 模块中所有 Block 的 map，其中 key 为为对应操作码 Block_/Loop/If 的地址
 
     Table table;// 表
 
@@ -125,7 +127,7 @@ typedef struct Module {
     uint32_t export_count;// 导出项数量
 
 
-    uint32_t start_function;
+    uint32_t start_function;// 起始函数在本地模块所有函数中索引，而起始函数是在【模块完成初始化后】，【被导出函数可调用之前】自动被调用的函数
 } Module;
 
 // 解析 Wasm 二进制文件内容，将其转化成内存格式 Module
