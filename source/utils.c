@@ -6,6 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+// 全局的异常信息，用于收集运行时（即虚拟机执行指令过程）中的异常信息
+char exception[4096];
+
 /*
  * LEB128（Little Endian Base 128） 变长编码格式目的是节约空间
  * 对于 32 位整数，编码后可能是 1 到 5 个字节

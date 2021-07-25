@@ -1,6 +1,8 @@
 #ifndef WASMC_UTILS_H
 #define WASMC_UTILS_H
 
+extern char exception[];
+
 #include "module.h"
 #include <stdbool.h>
 #include <stdlib.h>
