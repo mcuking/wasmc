@@ -1,10 +1,160 @@
 #include "module.h"
+#include "opcode.h"
 #include "utils.h"
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+// 在单条指令中，除了占一个字节的操作码之外，后面可能也会紧跟着立即数，如果有立即数，则直接跳过立即数
+// 注：指令是否存在立即数，是由操作数的类型决定，这也是 Wasm 标准规范的内容之一
+void skip_immediate(const uint8_t *bytes, uint32_t *pos) {
+    // 读取操作码
+    uint32_t opcode = bytes[*pos];
+    uint32_t count;
+    *pos = *pos + 1;
+    // 根据操作码类型，判断其有占多少位的立即数（或者没有立即数），并直接跳过该立即数
+    switch (opcode) {
+        case MemorySize:
+        case MemoryGrow:
+            read_LEB_unsigned(bytes, pos, 1);
+            break;
+        case Br:
+        case BrIf:
+        case Call:
+        case LocalGet:
+        case LocalSet:
+        case LocalTee:
+        case GlobalGet:
+        case GlobalSet:
+        case I32Const:
+            read_LEB_unsigned(bytes, pos, 32);
+            break;
+        case CallIndirect:
+            read_LEB_unsigned(bytes, pos, 32);
+            read_LEB_unsigned(bytes, pos, 1);
+            break;
+        case I64Const:
+            read_LEB_unsigned(bytes, pos, 64);
+            break;
+        case F32Const:
+            *pos += 4;
+            break;
+        case F64Const:
+            *pos += 8;
+            break;
+        case Block_:
+        case Loop:
+        case If:
+            read_LEB_unsigned(bytes, pos, 7);
+            break;
+        case I32Load ... I64Store32:
+            read_LEB_unsigned(bytes, pos, 32);
+            read_LEB_unsigned(bytes, pos, 32);
+            break;
+        case BrTable:
+            count = read_LEB_unsigned(bytes, pos, 32);
+            for (uint32_t i = 0; i < count; i++) {
+                read_LEB_unsigned(bytes, pos, 32);
+            }
+            read_LEB_unsigned(bytes, pos, 32);
+            break;
+        default:
+            // 其他操作码没有立即数
+            break;
+    }
+}
+
+// 收集所有本地模块定义的函数中 Block_/Loop/If 控制块的相关信息，例如起始地址、结束地址、跳转地址、控制块类型等，
+// 便于后续虚拟机解释执行指令时可以借助这些信息
+void find_blocks(Module *m) {
+    Block *function;
+    Block *block;
+    // 声明用于在遍历过程中存储控制块 block 的相关信息的栈
+    Block *blockstack[BLOCKSTACK_SIZE];
+    int top = -1;
+    uint8_t opcode = Unreachable;
+
+    // 遍历 m->functions 中所有的本地模块定义的函数，从每个函数字节码部分中收集 Block_/Loop/If 控制块的相关信息
+    // 注：跳过从外部模块导入的函数，原因是导入函数的执行只需要执行 func_ptr 指针所指向的真实函数即可，无需通过虚拟机执行指令的方式
+    for (uint32_t f = m->import_func_count; f < m->function_count; f++) {
+        // 获取单个函数对应的结构体
+        function = &m->functions[f];
+
+        // 从该函数的字节码部分的【起始地址】开始收集 Block_/Loop/If 控制块的相关信息--遍历字节码中的每条指令
+        uint32_t pos = function->start_addr;
+        // 直到该函数的字节码部分的【结束地址】结束
+        while (pos <= function->end_addr) {
+            // 每次 while 循环都会分析一条指令，而每条指令都是以占单个字节的操作码开始
+
+            // 获取操作码，根据操作码类型执行不同逻辑
+            opcode = m->bytes[pos];
+            switch (opcode) {
+                case Block_:
+                case Loop:
+                case If:
+                    // 如果操作码为 Block_/Loop/If 之一，则声明一个 Block 结构体
+                    block = acalloc(1, sizeof(Block), "Block");
+
+                    // 设置控制块的块类型：Block_/Loop/If
+                    block->block_type = opcode;
+                    // 由于 Block_/Loop/If 操作码的立即数用于表示该控制块的类型（占一个字节）
+                    // 所以可以根据该立即数，来获取控制块的类型（或签名），即控制块的入参/出参的数量和类型
+                    block->type = get_block_type(m->bytes[pos + 1]);
+                    // 设置控制块的起始地址
+                    block->start_addr = pos;
+
+                    // 向控制块栈中添加该控制块对应结构体
+                    blockstack[++top] = block;
+                    // 向 m->block_lookup 映射中添加该控制块对应结构体，其中 key 为对应操作码 Block_/Loop/If 的地址
+                    m->block_lookup[pos] = block;
+                    break;
+                case Else_:
+                    // 如果当前控制块中存在操作码为 Else_ 的指令，则当前控制块的块类型必须为 If
+                    ASSERT(blockstack[top]->block_type == If, "else not matched with if")
+
+                    // 将 Else_ 指令的下一条指令地址，设置为该控制块的 else_addr，即 else 分支对应的字节码的首地址，
+                    // 便于后续虚拟机在执行指令时，根据条件跳转到 else 分支对应的字节码继续执行指令
+                    blockstack[top]->else_addr = pos + 1;
+                    break;
+                case End_:
+                    // 如果操作码 End_ 的地址就是函数的字节码部分的【结束地址】，说明该控制块为该函数的最后一个控制块，则直接退出
+                    if (pos == function->end_addr) {
+                        break;
+                    }
+
+                    // 如果执行了 End_ 指令，说明至少收集了一个控制块的相关信息，所以 top 不可能是初始值 -1，至少大于等于 0
+                    ASSERT(top >= 0, "blockstack underflow")
+
+                    // 从控制块栈栈弹出该控制块
+                    block = blockstack[top--];
+
+                    // 将操作码 End_ 的地址设置为控制块的结束地址
+                    block->end_addr = pos;
+                    // 设置控制块的跳转地址 br_addr
+                    if (block->block_type == Loop) {
+                        // 如果是 Loop 类型的控制块，需要循环执行，所以跳转地址就是该控制块开头指令（即 Loop 指令）的下一条指令地址
+                        // 注：Loop 指令占用两个字节（1字节操作码 + 1字节操作数），所以需要加 2
+                        block->br_addr = block->start_addr + 2;
+                    } else {
+                        // 如果是非 Loop 类型的控制块，则跳转地址就是该控制块的结尾地址，也就是操作码 End_ 的地址
+                        block->br_addr = pos;
+                    }
+                    break;
+                default:
+                    break;
+            }
+            // 在单条指令中，除了占一个字节的操作码之外，后面可能也会紧跟着立即数，如果有立即数，则直接跳过立即数去处理下一条指令的操作码
+            // 注：指令是否存在立即数，是由操作数的类型决定，这也是 Wasm 标准规范的内容之一
+            skip_immediate(m->bytes, &pos);
+        }
+        // 当执行完 End_ 分支后，top 应该重新回到 -1，否则就是没有执行 End_ 分支
+        ASSERT(top == -1, "Function ended in middle of block\n")
+        // 控制块应该以操作码 End_ 结束
+        ASSERT(opcode == End_, "Function block did not end with 0xb\n")
+    }
+}
 
 // 解析表段中的表 table_type（目前表段只会包含一张表）
 // 表 table_type 编码如下：
@@ -233,7 +383,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                         }
 
                         // 如果未找到，则报错
-                        FATAL("Error: %s\n", err);
+                        FATAL("Error: %s\n", err)
                     } while (false);
 
                     free(sym);
@@ -267,11 +417,11 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                             // 导入项为表的情况
 
                             // 一个模块只能定义一张表，如果 m->table.entries 不为空，说明已经存在表，则报错
-                            ASSERT(!m->table.entries, "More than 1 table not supported\n");
+                            ASSERT(!m->table.entries, "More than 1 table not supported\n")
                             Table *tval = val;
                             m->table.entries = val;
                             // 如果【本地模块的表的当前元素数量】大于【导入表的元素数量上限】，则报错
-                            ASSERT(m->table.cur_size <= tval->max_size, "Imported table is not large enough\n");
+                            ASSERT(m->table.cur_size <= tval->max_size, "Imported table is not large enough\n")
                             m->table.entries = *(uint32_t **) val;
                             // 设置【导入表的当前元素数量】为【本地模块表的当前元素数量】
                             m->table.cur_size = tval->cur_size;
@@ -284,10 +434,10 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                             // 导入项为内存的情况
 
                             // 一个模块只能定义一块内存，如果 m->memory.bytes 不为空，说明已经存在表，则报错
-                            ASSERT(!m->memory.bytes, "More than 1 memory not supported\n");
+                            ASSERT(!m->memory.bytes, "More than 1 memory not supported\n")
                             Memory *mval = val;
                             // 如果【本地模块的内存的当前页数】大于【导入内存的最大页数】，则报错
-                            ASSERT(m->memory.cur_size <= mval->max_size, "Imported memory is not large enough\n");
+                            ASSERT(m->memory.cur_size <= mval->max_size, "Imported memory is not large enough\n")
                             // 设置【导入内存的当前页数】为【本地模块内存的当前页数】
                             m->memory.cur_size = mval->cur_size;
                             // 设置【导入内存的最大页数】为【本地模块内存的最大页数】
@@ -328,7 +478,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                             break;
                         default:
                             // 如果导入项为其他类型，则报错
-                            FATAL("Import of kind %d not supported\n", external_kind);
+                            FATAL("Import of kind %d not supported\n", external_kind)
                     }
                 }
                 break;
@@ -504,13 +654,13 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                             break;
                         case KIND_TABLE:
                             // 目前 Wasm 版本规定只能定义一张表，所以索引只能为 0
-                            ASSERT(index == 0, "Only 1 table in MVP");
+                            ASSERT(index == 0, "Only 1 table in MVP")
                             // 获取模块内定义的表并赋给导出项
                             m->exports[eidx].value = &m->table;
                             break;
                         case KIND_MEMORY:
                             // 目前 Wasm 版本规定只能定义一个内存，所以索引只能为 0
-                            ASSERT(index == 0, "Only 1 memory in MVP");
+                            ASSERT(index == 0, "Only 1 memory in MVP")
                             // 获取模块内定义的内存并赋给导出项
                             m->exports[eidx].value = &m->memory;
                             break;
@@ -526,7 +676,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
             }
             case StartID: {
                 // 解析起始段
-                // 起始段记录了起始函数索引，而起始函数是在【模块完成初始化后】，【被导出函数可调用之前】自动被调用的函数
+                // 起始段记录了起始函数在本地模块所有函数中索引，而起始函数是在【模块完成初始化后】，【被导出函数可调用之前】自动被调用的函数
                 // 可以将起始函数视为一种初始化全局变量或内存的函数，且函数必须处于被模块内部，不能是从外部导入的
                 // 起始函数的作用有两个：
                 // 1. 在模块加载后进行初始化工作
@@ -601,7 +751,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                     // 读取 locals 数量（注：相同类型的局部变量算一个 locals）
                     uint32_t local_count = read_LEB_unsigned(bytes, &pos, 32);
 
-                    uint32_t save_pos, tidx, lidx, lecount;
+                    uint32_t save_pos, lidx, lecount;
 
                     // 接下来需要对局部变量的相关字节进行两次遍历，所以先保存当前位置，方便第二次遍历前恢复位置
                     save_pos = pos;
@@ -656,7 +806,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                     function->br_addr = function->end_addr;
 
                     // 代码项的字节码部分必须以 0x0b 结尾
-                    ASSERT(bytes[function->end_addr] == 0x0b, "Code section did not end with 0x0b\n");
+                    ASSERT(bytes[function->end_addr] == 0x0b, "Code section did not end with 0x0b\n")
 
                     // 更新当前的地址为当前代码项的【结束地址】（即代码项的字节码部分【结束地址】）加 1，以便遍历下一个代码项
                     pos = function->end_addr + 1;
@@ -680,7 +830,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                     // 读取内存索引 mem_idx（即初始化哪块内存）
                     uint32_t index = read_LEB_unsigned(bytes, &pos, 32);
                     // 目前 Wasm 版本规定一个模块只能定义一块内存，所以 index 只能为 0
-                    ASSERT(index == 0, "Only 1 default memory in MVP");
+                    ASSERT(index == 0, "Only 1 default memory in MVP")
 
                     // TODO: 设置内存偏移量（从哪开始初始化），需要执行表达式 offset_expr 对应的字节码指令，来获得偏移量，要等到虚拟机完成后才可实现
 
@@ -704,6 +854,10 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
             }
         }
     }
+
+    // 收集所有本地模块定义的函数中 Block_/Loop/If 控制块的相关信息，例如起始地址、结束地址、跳转地址、控制块类型等，
+    // 便于后续虚拟机解释执行指令时可以借助这些信息
+    find_blocks(m);
 
     return m;
 }

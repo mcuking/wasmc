@@ -47,4 +47,7 @@ bool resolve_sym(char *filename, char *symbol, void **val, char **err);
 // 基于函数类型计算唯一的掩码值
 uint64_t get_type_mask(Type *type);
 
+// 根据表示该控制块的类型的值（占一个字节），返回控制块的类型（或签名），即控制块的入参/出参的数量和类型
+Type *get_block_type(uint8_t value_type);
+
 #endif

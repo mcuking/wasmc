@@ -45,7 +45,7 @@ uint64_t read_LEB(const uint8_t *bytes, uint32_t *pos, uint32_t maxbits, bool si
         // 所以 bcnt > (maxbits + 7 - 1) / 7 表示该次循环所得到的字节数 bcnt + 1 已经超过了 maxbits 位二进制数字所需的字节数 (maxbits + 7 - 1) / 7 + 1
         // 也就是该数字的位数超出了传入的最大位数值，所以报错
         if (bcnt > (maxbits + 7 - 1) / 7) {
-            FATAL("Unsigned LEB at byte %d overflow", startpos);
+            FATAL("Unsigned LEB at byte %d overflow", startpos)
         }
     }
 
@@ -100,7 +100,7 @@ void *arecalloc(void *ptr, size_t old_nmemb, size_t nmemb, size_t size, char *na
     // 重新分配内存
     void *res = realloc(ptr, nmemb * size);
     if (res == NULL) {
-        FATAL("Could not allocate %lu bytes for %s", nmemb * size, name);
+        FATAL("Could not allocate %lu bytes for %s", nmemb * size, name)
     }
     // 将新申请的内存中的前面部分--即为新数据准备的内存空间，用 0 进行初始化
     memset(res + old_nmemb * size, 0, (nmemb - old_nmemb) * size);
@@ -148,4 +148,45 @@ uint64_t get_type_mask(Type *type) {
         mask |= 0x80 - type->params[p];
     }
     return mask;
+}
+
+// 根据目前版本的 Wasm 标准，控制块只能有一个返回值
+uint32_t block_type_results[4][1] = {{I32}, {I64}, {F32}, {F64}};
+
+Type block_types[5] = {
+        {
+                .result_count = 0,
+        },
+        {
+                .result_count = 1,
+                .results = block_type_results[0],
+        },
+        {
+                .result_count = 1,
+                .results = block_type_results[1],
+        },
+        {
+                .result_count = 1,
+                .results = block_type_results[2],
+        },
+        {
+                .result_count = 1,
+                .results = block_type_results[3],
+        }};
+
+// 根据表示该控制块的类型的值（占一个字节），返回控制块的类型（或签名），即控制块的入参/出参的数量和类型
+Type *get_block_type(uint8_t value_type) {
+    switch (value_type) {
+        case BLOCK:
+        case I32:
+            return &block_types[1];
+        case I64:
+            return &block_types[2];
+        case F32:
+            return &block_types[3];
+        case F64:
+            return &block_types[4];
+        default:
+            FATAL("invalid block_type value_type: %d\n", value_type)
+    }
 }
