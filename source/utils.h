@@ -46,12 +46,12 @@ void *arecalloc(void *ptr, size_t old_nmemb, size_t nmemb, size_t size, char *na
 // 如果解析失败则返回 false 并设置 err
 bool resolve_sym(char *filename, char *symbol, void **val, char **err);
 
-// 基于函数类型计算唯一的掩码值
+// 基于函数签名计算唯一的掩码值
 uint64_t get_type_mask(Type *type);
 
 // 根据表示该控制块的类型的值（占一个字节），返回控制块的类型（或签名），即控制块的返回值的数量和类型
 // 0x7f 表示有一个 i32 类型返回值、0x7e 表示有一个 i64 类型返回值、0x7d 表示有一个 f32 类型返回值、0x7c 表示有一个 f64 类型返回值、0x40 表示没有返回值
-// 注：目前多返回值提案还没有进入 Wasm 标准，根据当前版本的 Wasm 标准，控制块不能有参数，且最多只能只能有一个返回值
+// 注：目前多返回值提案还没有进入 Wasm 标准，根据当前版本的 Wasm 标准，控制块不能有参数，且最多只能有一个返回值
 Type *get_block_type(uint8_t value_type);
 
 #endif

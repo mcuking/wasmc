@@ -142,9 +142,9 @@ void find_blocks(Module *m) {
                     // 由于 Block_/Loop/If 操作码的立即数用于表示该控制块的类型（占一个字节）
                     // 所以可以根据该立即数，来获取控制块的类型，即控制块的返回值的数量和类型
 
-                    // get_block_type 根据表示该控制块的类型的值（占一个字节），返回控制块的类型（或签名），即控制块的返回值的数量和类型
+                    // get_block_type 根据表示该控制块的类型的值（占一个字节），返回控制块的签名，即控制块的返回值的数量和类型
                     // 0x7f 表示有一个 i32 类型返回值、0x7e 表示有一个 i64 类型返回值、0x7d 表示有一个 f32 类型返回值、0x7c 表示有一个 f64 类型返回值、0x40 表示没有返回值
-                    // 注：目前多返回值提案还没有进入 Wasm 标准，根据当前版本的 Wasm 标准，控制块不能有参数，且最多只能只能有一个返回值
+                    // 注：目前多返回值提案还没有进入 Wasm 标准，根据当前版本的 Wasm 标准，控制块不能有参数，且最多只能有一个返回值
                     block->type = get_block_type(m->bytes[pos + 1]);
                     // 设置控制块的起始地址
                     block->start_addr = pos;
@@ -315,16 +315,16 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
             }
             case TypeID: {
                 // 解析类型段
-                // 即解析模块中所有函数类型（也叫函数签名或函数原型）
+                // 即解析模块中所有函数签名（也叫函数原型）
                 // 函数原型示例：(a, b, ...) -> (x, y, ...)
 
                 // 类型段编码格式如下：
                 // type_sec: 0x01|byte_count|vec<func_type>
 
-                // 读取类型段中所有函数类型的数量
+                // 读取类型段中所有函数签名的数量
                 m->type_count = read_LEB_unsigned(bytes, &pos, 32);
 
-                // 为存储类型段中的函数类型申请内存
+                // 为存储类型段中的函数签名申请内存
                 m->types = acalloc(m->type_count, sizeof(Type), "Module->types");
 
                 // 遍历解析每个类型 func_type，其编码格式如下：
@@ -353,7 +353,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                         type->results[r] = read_LEB_unsigned(bytes, &pos, 32);
                     }
 
-                    // 基于函数类型计算的唯一掩码值
+                    // 基于函数签名计算的唯一掩码值
                     type->mask = get_type_mask(type);
                 }
                 break;
@@ -390,7 +390,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                     // 根据不同的导入项类型，读取对应的内容
                     switch (external_kind) {
                         case KIND_FUNCTION:
-                            // 读取函数类型索引 type_idx
+                            // 读取函数签名索引 type_idx
                             type_index = read_LEB_unsigned(bytes, &pos, 32);
                             break;
                         case KIND_TABLE:
@@ -454,7 +454,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                             func->import_field = import_field;
                             // 设置【本地模块中对应函数的指针 func_ptr 】指向【导入函数的实际值】
                             func->func_ptr = val;
-                            // 设置【导入函数类型（即函数签名）】为【本地模块中对应函数的函数类型（即函数签名）】
+                            // 设置【导入函数签名】为【本地模块中对应函数的函数签名】
                             func->type = &m->types[type_index];
                             break;
                         case KIND_TABLE:
@@ -529,7 +529,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
             }
             case FuncID: {
                 // 解析函数段
-                // 函数段列出了内部函数的函数类型在所有函数类型中的索引，函数的局部变量和字节码则存在代码段中
+                // 函数段列出了内部函数的函数签名在所有函数签名中的索引，函数的局部变量和字节码则存在代码段中
 
                 // 函数段编码格式如下：
                 // func_sec: 0x03|byte_count|vec<type_idx>
@@ -550,13 +550,13 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                 }
                 m->functions = functions;
 
-                // 遍历每个函数项，读取其对应的函数类型在所有函数类型中的索引，并根据索引获取到函数类型
+                // 遍历每个函数项，读取其对应的函数签名在所有函数签名中的索引，并根据索引获取到函数签名
                 for (uint32_t f = m->import_func_count; f < m->function_count; f++) {
                     // f 为该函数在所有函数（包括导入函数）中的索引
                     m->functions[f].fidx = f;
-                    // tidx 为该内部函数的函数类型在所有函数类型中的索引
+                    // tidx 为该内部函数的函数签名在所有函数签名中的索引
                     uint32_t tidx = read_LEB_unsigned(bytes, &pos, 32);
-                    // 通过索引 tidx 从所有函数类型中获取到具体的函数类型
+                    // 通过索引 tidx 从所有函数签名中获取到具体的函数签名，然后设置为该函数的函数签名
                     m->functions[f].type = &m->types[tidx];
                 }
                 break;
