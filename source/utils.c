@@ -138,7 +138,7 @@ bool resolve_sym(char *filename, char *symbol, void **val, char **err) {
     return true;
 }
 
-// 基于函数类型计算唯一的掩码值
+// 基于函数签名计算唯一的掩码值
 uint64_t get_type_mask(Type *type) {
     uint64_t mask = 0x80;
 
@@ -153,7 +153,7 @@ uint64_t get_type_mask(Type *type) {
     return mask;
 }
 
-// 根据目前版本的 Wasm 标准，控制块不能有参数，且最多只能只能有一个返回值
+// 根据目前版本的 Wasm 标准，控制块不能有参数，且最多只能有一个返回值
 // 注：目前多返回值提案还没有进入 Wasm 标准
 uint32_t block_type_results[4][1] = {{I32}, {I64}, {F32}, {F64}};
 
@@ -178,9 +178,9 @@ Type block_types[5] = {
                 .results = block_type_results[3],
         }};
 
-// 根据表示该控制块的类型的值（占一个字节），返回控制块的类型（或签名），即控制块的返回值的数量和类型
+// 根据表示该控制块的签名的值（占一个字节），返回控制块的签名，即控制块的返回值的数量和类型
 // 0x7f 表示有一个 i32 类型返回值、0x7e 表示有一个 i64 类型返回值、0x7d 表示有一个 f32 类型返回值、0x7c 表示有一个 f64 类型返回值、0x40 表示没有返回值
-// 注：目前多返回值提案还没有进入 Wasm 标准，根据当前版本的 Wasm 标准，控制块不能有参数，且最多只能只能有一个返回值
+// 注：目前多返回值提案还没有进入 Wasm 标准，根据当前版本的 Wasm 标准，控制块不能有参数，且最多只能有一个返回值
 Type *get_block_type(uint8_t value_type) {
     switch (value_type) {
         case 0x40:

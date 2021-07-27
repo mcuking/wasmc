@@ -40,20 +40,20 @@ typedef enum {
     DataID   // 数据段 ID
 } SecID;
 
-// 函数类型（或称函数签名）结构体
+// 函数签名结构体
 typedef struct Type {
     uint32_t param_count; // 函数的参数数量
     uint32_t *params;     // 函数的参数类型集合
     uint32_t result_count;// 函数的返回值数量
     uint32_t *results;    // 函数的返回值类型集合
-    uint64_t mask;        // 基于函数类型计算的唯一掩码值
+    uint64_t mask;        // 基于函数签名计算的唯一掩码值
 } Type;
 
 // 控制块（包含函数）结构体
 typedef struct Block {
-    uint8_t block_type;// 控制块类型，0x00: function, 0x01: init_exp, 0x02: block, 0x03: loop, 0x04: if
+    uint8_t block_type;// 控制块类型，包含 5 种，分别是 0x00: function, 0x01: init_exp, 0x02: block, 0x03: loop, 0x04: if
+    Type *type;        // 控制块签名，即所有类型的控制块的返回值的数量和类型
     uint32_t fidx;     // 函数在所有函数中的索引（仅针对控制块类型为函数的情况）
-    Type *type;        // 函数类型，注：用来描述所有类型的控制块的入参和出参，不仅限于函数类型的控制块
 
     uint32_t local_count;// 局部变量数量（仅针对控制块类型为函数的情况）
     uint32_t *locals;    // 用于存储局部变量的值（仅针对控制块类型为函数的情况）
@@ -133,9 +133,10 @@ typedef struct Frame {
     Block *block;// 栈帧对应的控制块（包含函数）结构体
     int sp;      // stack pointer 栈指针，指向该栈帧的操作数栈顶
     int fp;      // frame pointer 帧指针，指向该栈帧的操作数栈底
-    uint32_t ra; // return address 控制块（包含函数）返回地址，存储该栈帧调用指令的下一条指令的地址，
+    uint32_t ra; // return address 函数返回地址，存储该栈帧调用指令的下一条指令的地址，
                  // 当该栈帧从调用栈弹出时，会返回到该栈帧调用指令的下一条指令继续执行，
-                 // 换句话说就是当前栈帧对应的控制块（包含函数）执行完后，返回到调用该控制块（包含函数）的地方继续执行后面的指令
+                 // 换句话说就是当前栈帧对应的函数执行完后，返回到调用该函数的地方继续执行后面的指令
+                 // 注：该属性均针对类型为函数的控制块（只有函数执行完才会返回），其他类型的控制块没有该属性
 } Frame;
 
 // Wasm 内存格式结构体
@@ -143,8 +144,8 @@ typedef struct Module {
     const uint8_t *bytes;// 用于存储 Wasm 二进制模块的内容
     uint32_t byte_count; // Wasm 二进制模块的字节数
 
-    Type *types;        // 用于存储模块中所有函数类型
-    uint32_t type_count;// 模块中所有函数类型的数量
+    Type *types;        // 用于存储模块中所有函数签名
+    uint32_t type_count;// 模块中所有函数签名的数量
 
     uint32_t import_func_count;// 导入函数的数量
     uint32_t function_count;   // 所有函数的数量（包括导入函数）
