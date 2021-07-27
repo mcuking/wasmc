@@ -7,7 +7,9 @@
 #define WA_VERSION 0x01    // Wasm 标准的版本号
 
 #define PAGE_SIZE 0x10000     // 每页内存的大小 65536，即 64 * 1024，也就是 64KB
-#define BLOCKSTACK_SIZE 0x1000// 控制块栈的容量 4096
+#define STACK_SIZE 0x10000    // 操作数栈的容量 65536，即 64 * 1024，也就是 64KB
+#define CALLSTACK_SIZE 0x1000 // 调用栈的容量 4096，即 4 * 1024，也就是 4KB
+#define BLOCKSTACK_SIZE 0x1000// 控制块栈的容量 4096，即 4 * 1024，也就是 4KB
 
 #define I32 0x7f    // -0x01
 #define I64 0x7e    // -0x02
@@ -22,7 +24,7 @@
 #define KIND_MEMORY 2
 #define KIND_GLOBAL 3
 
-// 段 ID 的枚举
+// 段 ID 枚举
 typedef enum {
     CustomID,// 自定义段 ID
     TypeID,  // 类型段 ID
@@ -38,7 +40,7 @@ typedef enum {
     DataID   // 数据段 ID
 } SecID;
 
-// 函数类型（或称函数签名）对应结构体
+// 函数类型（或称函数签名）结构体
 typedef struct Type {
     uint32_t param_count; // 函数的参数数量
     uint32_t *params;     // 函数的参数类型集合
@@ -47,7 +49,7 @@ typedef struct Type {
     uint64_t mask;        // 基于函数类型计算的唯一掩码值
 } Type;
 
-// 控制块（包含函数）对应的结构体
+// 控制块（包含函数）结构体
 typedef struct Block {
     uint8_t block_type;// 控制块类型，0x00: function, 0x01: init_exp, 0x02: block, 0x03: loop, 0x04: if
     uint32_t fidx;     // 函数在所有函数中的索引（仅针对控制块类型为函数的情况）
@@ -66,7 +68,7 @@ typedef struct Block {
     void *(*func_ptr)();// 导入函数的实际值（仅针对从外部模块导入的函数）
 } Block;
 
-// 表对应的结构体
+// 表结构体
 typedef struct Table {
     uint8_t elem_type;// 表中元素的类型（必须为函数引用，编码为 0x70）
     uint32_t min_size;// 表的元素数量限制下限
@@ -75,7 +77,7 @@ typedef struct Table {
     uint32_t *entries;// 用于存储表中的元素
 } Table;
 
-// 内存对应的结构体
+// 内存结构体
 typedef struct Memory {
     uint32_t min_size;// 最小页数
     uint32_t max_size;// 最大页数
@@ -83,14 +85,14 @@ typedef struct Memory {
     uint8_t *bytes;   // 用于存储数据
 } Memory;
 
-// 导出项对应结构体
+// 导出项结构体
 typedef struct Export {
     char *export_name;     // 导出项成员名
     uint32_t external_kind;// 导出项类型（类型可以是函数/表/内存/全局变量）
     void *value;           // 用于存储导出项的值
 } Export;
 
-// 全局变量值/操作数栈的值对应的结构体
+// 全局变量值/操作数栈的值结构体
 typedef struct StackValue {
     uint8_t value_type;// 值类型
     union {
@@ -103,7 +105,40 @@ typedef struct StackValue {
     } value;// 值
 } StackValue;
 
-// Wasm 内存格式对应的结构体
+/*
+ * 栈式虚拟机的背景知识：
+ * 调用栈--callstack
+ * 栈帧--stack frame
+ * 操作数栈--operand stack
+ * 栈指针--stack pointer
+ * 帧指针--frame pointer
+ * 控制块（包含函数）返回地址--return address
+ * 调用栈是由一个个独立的栈帧组成，每次控制块（包含函数）的调用，都会向调用栈压入一个栈帧
+ * 每次控制块（包含函数）的执行结束，都会从调用栈弹出对应栈帧并销毁
+ * 一连串的控制块（包含函数）调用，就是不停创建和销毁栈帧的过程。但在任一时刻，只有位于调用栈顶的栈帧是活跃的，也就是所谓的当前栈帧
+ * 每个栈帧包含以下内容：
+ * 1. 栈帧对应的控制块（包含函数）结构体
+ * 2. 操作数栈，用于存储参数、局部变量、操作数，所有的栈帧共享同一个完整的操作数栈，每个栈帧会占用这个操作数栈中的某一部分，
+ * 所以要两个指针来划定该栈帧在操作数栈的范围，其中 stack pointer 栈指针指向了该栈帧的操作数栈顶，frame pointer 帧指针指向该栈帧的操作数栈底
+ * 3. 控制块（包含函数）返回地址，存储该栈帧调用指令的下一条指令的地址，当该栈帧从调用栈弹出时，会返回到该栈帧调用指令的下一条指令继续执行，
+ * 换句话说就是当前栈帧对应的控制块（包含函数）执行完退出后，返回到调用该控制块的地方继续执行后面的指令
+ *
+ * 注：目前这个解释器定义的栈帧中比没有类似 JVM 虚拟机栈帧中的局部变量表，而是将参数、局部变量和操作数都放在了操作数栈上，主要目的有两个：
+ * 1. 实现简单，不需要额外定义局部变量表，可以很大程度简化代码
+ * 2. 让参数传递变成无操作 NOP，可以让两个栈帧的操作数栈有一部分数据是重叠的，这部分数据就是参数，这样自然就起到了参数传递在不同控制块（包含函数）之间的传递
+ * */
+
+// 栈帧结构体
+typedef struct Frame {
+    Block *block;// 栈帧对应的控制块（包含函数）结构体
+    int sp;      // stack pointer 栈指针，指向该栈帧的操作数栈顶
+    int fp;      // frame pointer 帧指针，指向该栈帧的操作数栈底
+    uint32_t ra; // return address 控制块（包含函数）返回地址，存储该栈帧调用指令的下一条指令的地址，
+                 // 当该栈帧从调用栈弹出时，会返回到该栈帧调用指令的下一条指令继续执行，
+                 // 换句话说就是当前栈帧对应的控制块（包含函数）执行完后，返回到调用该控制块（包含函数）的地方继续执行后面的指令
+} Frame;
+
+// Wasm 内存格式结构体
 typedef struct Module {
     const uint8_t *bytes;// 用于存储 Wasm 二进制模块的内容
     uint32_t byte_count; // Wasm 二进制模块的字节数
@@ -127,6 +162,14 @@ typedef struct Module {
     uint32_t export_count;// 导出项数量
 
     uint32_t start_function;// 起始函数在本地模块所有函数中索引，而起始函数是在【模块完成初始化后】，【被导出函数可调用之前】自动被调用的函数
+
+    // 下面属性用于记录运行时（即栈式虚拟机执行指令流的过程）状态，相关背景知识请查看上面栈帧结构体的注释
+    uint32_t pc;                    // program counter 程序计数器，记录下一条即将执行的指令的地址
+    int sp;                         // operand stack pointer 操作数栈指针，指向完整的操作数栈顶（注：所有栈帧共享一个完整的操作数栈，分别占用其中的某一部分）
+    int fp;                         // current frame pointer into stack 当前栈帧的帧指针，指向当前栈帧的操作数栈底
+    StackValue stack[STACK_SIZE];   // operand stack 操作数栈，用于存储参数、局部变量、操作数
+    int csp;                        // callstack pointer 调用栈指针，保存处在调用栈顶的栈帧索引，即当前栈帧在调用栈中的索引
+    Frame callstack[CALLSTACK_SIZE];// callstack 调用栈，用于存储栈帧
 } Module;
 
 // 解析 Wasm 二进制文件内容，将其转化成内存格式 Module
