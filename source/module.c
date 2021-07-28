@@ -911,6 +911,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
     // 所以 m->start_function 不为 -1，说明本地模块存在起始函数，
     // 需要在本地模块已完成初始化后，且本地模块的导出函数被调用之前，执行本地模块的起始函数
     if (m->start_function != -1) {
+        // 保存起始函数索引到 fidx
         uint32_t fidx = m->start_function;
         bool result;
 
@@ -918,14 +919,8 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
         // 注：从外部模块导入的函数在本地模块的所有函数中的前部分，可参考上面解析 Wasm 二进制文件导入段中处理外部模块导入函数的逻辑
         ASSERT(fidx >= m->import_func_count, "Start function should be local function of native module\n")
 
-        // 调用函数前的设置，主要设置内容如下：
-        // 1. 将当前函数关联的栈帧压入到调用栈顶成为当前栈帧，同时保存该栈帧被压入调用栈顶前的运行时状态，例如 sp fp ra 等
-        // 2. 将当前函数的局部变量压入到操作数栈顶（默认初始值为 0）
-        // 3. 将函数的字节码部分的【起始地址】设置为 pc（即下一条待执行指令的地址），即开始执行函数字节码中的指令流
-        setup_call(m, fidx);
-
-        // 虚拟机执行起始函数的字节码中的指令
-        result = interpret(m);
+        // 调用 Wasm 模块的起始函数
+        result = invoke(m, fidx);
 
         // 虚拟机在执行起始函数的字节码中的指令，如果遇到错误会返回 false，否则顺利执行完成后会返回 true
         // 如果为 false，则将运行时（虚拟机执行指令过程）收集的异常信息打印出来
