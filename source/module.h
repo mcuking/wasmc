@@ -40,13 +40,14 @@ typedef enum {
     DataID   // 数据段 ID
 } SecID;
 
-// 函数签名结构体
+// 控制块（包含函数）签名结构体
+// 注：目前多返回值提案还没有进入 Wasm 标准，根据当前版本的 Wasm 标准，非函数类型的控制块不能有参数，且最多只能有一个返回值
 typedef struct Type {
-    uint32_t param_count; // 函数的参数数量
-    uint32_t *params;     // 函数的参数类型集合
-    uint32_t result_count;// 函数的返回值数量
-    uint32_t *results;    // 函数的返回值类型集合
-    uint64_t mask;        // 基于函数签名计算的唯一掩码值
+    uint32_t param_count; // 参数数量
+    uint32_t *params;     // 参数类型集合
+    uint32_t result_count;// 返回值数量
+    uint32_t *results;    // 返回值类型集合
+    uint64_t mask;        // 基于控制块（包含函数）签名计算的唯一掩码值
 } Type;
 
 // 控制块（包含函数）结构体
@@ -131,9 +132,13 @@ typedef struct StackValue {
 // 栈帧结构体
 typedef struct Frame {
     Block *block;// 栈帧对应的控制块（包含函数）结构体
-    int sp;      // stack pointer 栈指针，指向该栈帧的操作数栈顶
-    int fp;      // frame pointer 帧指针，指向该栈帧的操作数栈底
-    uint32_t ra; // return address 函数返回地址，存储该栈帧调用指令的下一条指令的地址，
+
+    // 下面三个属性是在该栈帧被压入调用栈顶时，保存的当时的运行时的状态，
+    // 目的是为了在该栈帧关联的控制块执行完成，该栈帧弹出时，恢复压栈之前的运行时状态
+    int sp;      // stack pointer 用于保存该栈帧被压入操作数栈顶前的【操作数栈顶指针】的值
+    int fp;      // frame pointer 用于保存该栈帧被压入操作数栈顶前的【当前栈帧的操作数栈底指针】的值
+    uint32_t ra; // return address 用于保存【函数返回地址】，即【该栈帧调用指令的下一条指令的地址】，
+                 // 也就是该栈帧被压入操作数栈顶前的 m->pc 的值
                  // 当该栈帧从调用栈弹出时，会返回到该栈帧调用指令的下一条指令继续执行，
                  // 换句话说就是当前栈帧对应的函数执行完后，返回到调用该函数的地方继续执行后面的指令
                  // 注：该属性均针对类型为函数的控制块（只有函数执行完才会返回），其他类型的控制块没有该属性
@@ -166,7 +171,7 @@ typedef struct Module {
 
     // 下面属性用于记录运行时（即栈式虚拟机执行指令流的过程）状态，相关背景知识请查看上面栈帧结构体的注释
     uint32_t pc;                    // program counter 程序计数器，记录下一条即将执行的指令的地址
-    int sp;                         // operand stack pointer 操作数栈指针，指向完整的操作数栈顶（注：所有栈帧共享一个完整的操作数栈，分别占用其中的某一部分）
+    int sp;                         // operand stack pointer 操作数栈顶指针，指向完整的操作数栈顶（注：所有栈帧共享一个完整的操作数栈，分别占用其中的某一部分）
     int fp;                         // current frame pointer into stack 当前栈帧的帧指针，指向当前栈帧的操作数栈底
     StackValue stack[STACK_SIZE];   // operand stack 操作数栈，用于存储参数、局部变量、操作数
     int csp;                        // callstack pointer 调用栈指针，保存处在调用栈顶的栈帧索引，即当前栈帧在调用栈中的索引
