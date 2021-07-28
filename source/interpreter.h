@@ -13,4 +13,7 @@ void setup_call(Module *m, uint32_t fidx);
 // 虚拟机执行字节码中的指令流
 bool interpret(Module *m);
 
+// 调用索引为 fidx 的函数
+bool invoke(Module *m, uint32_t fidx);
+
 #endif
