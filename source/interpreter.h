@@ -16,4 +16,9 @@ bool interpret(Module *m);
 // 调用索引为 fidx 的函数
 bool invoke(Module *m, uint32_t fidx);
 
+// 计算初始化表达式
+// 参数 type 为初始化表达式的返回值类型
+// 参数 *pc 为初始化表达式的字节码部分的【起始地址】
+void run_init_expr(Module *m, uint8_t type, uint32_t *pc);
+
 #endif
