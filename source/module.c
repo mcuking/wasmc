@@ -268,8 +268,14 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
     // 为 Wasm 内存格式对应的结构体 m 申请内存
     m = acalloc(1, sizeof(struct Module), "Module");
 
+    // 重置运行时相关状态，主要是清空操作数栈、调用栈等
+    m->sp = -1;
+    m->fp = -1;
+    m->csp = -1;
+
     m->bytes = bytes;
     m->byte_count = byte_count;
+    m->block_lookup = acalloc(m->byte_count, sizeof(Block *), "function->block_lookup");
 
     // 起始函数索引初始值设置为 -1
     m->start_function = -1;
@@ -643,10 +649,12 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                     // 由于新增一个全局变量，所以需要重新申请内存，调用 arecalloc 函数在原有内存基础上重新申请内存
                     m->globals = arecalloc(m->globals, gidx, m->global_count, sizeof(StackValue), "globals");
 
-                    // 设置当前全局变量的值类型
-                    m->globals[gidx].value_type = type;
+                    // 计算初始化表达式 init_expr，并将计算结果设置为当前全局变量的初始值
+                    run_init_expr(m, type, &pos);
 
-                    // TODO: 设置当前全局变量的初始值，需要执行表达式 init_expr 对应的字节码指令，来获得初始值，要等到虚拟机完成后才可实现
+                    // 计算初始化表达式 init_expr 也就是栈式虚拟机执行表达式的字节码中的指令流过程，最终操作数栈顶保存的就是表达式的返回值，即计算结果
+                    // 将栈顶的值弹出并赋值给当前全局变量即可
+                    m->globals[gidx] = m->stack[m->sp--];
                 }
                 pos = start_pos + slen;
                 break;
@@ -750,10 +758,12 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                     // 目前 Wasm 版本规定一个模块只能定义一张表，所以 index 只能为 0
                     ASSERT(index == 0, "Only 1 default table in MVP\n")
 
-                    // TODO: 设置表内偏移量（从哪开始初始化），需要执行表达式 offset_expr 对应的字节码指令，来获得偏移量，要等到虚拟机完成后才可实现
+                    // 计算初始化表达式 offset_expr，并将计算结果设置为当前表内偏移量 offset
+                    run_init_expr(m, I32, &pos);
 
-                    // 暂时设置为 0
-                    uint32_t offset = 0;
+                    // 计算初始化表达式 offset_expr 也就是栈式虚拟机执行表达式的字节码中的指令流过程，最终操作数栈顶保存的就是表达式的返回值，即计算结果
+                    // 将栈顶的值弹出并赋值给当前表内偏移量 offset
+                    uint32_t offset = m->stack[m->sp--].value.uint32;
 
                     // 函数索引列表（即给定的元素初始化数据）
                     uint32_t num_elem = read_LEB_unsigned(bytes, &pos, 32);
@@ -876,10 +886,12 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                     // 目前 Wasm 版本规定一个模块只能定义一块内存，所以 index 只能为 0
                     ASSERT(index == 0, "Only 1 default memory in MVP\n")
 
-                    // TODO: 设置内存偏移量（从哪开始初始化），需要执行表达式 offset_expr 对应的字节码指令，来获得偏移量，要等到虚拟机完成后才可实现
+                    // 计算初始化表达式 offset_expr，并将计算结果设置为当前内存偏移量 offset
+                    run_init_expr(m, I32, &pos);
 
-                    // 暂时设置为 0
-                    uint32_t offset = 0;
+                    // 计算初始化表达式 offset_expr 也就是栈式虚拟机执行表达式的字节码中的指令流过程，最终操作数栈顶保存的就是表达式的返回值，即计算结果
+                    // 将栈顶的值弹出并赋值给当前内存偏移量 offset
+                    uint32_t offset = m->stack[m->sp--].value.uint32;
 
                     // 读取初始化数据所占内存大小
                     uint32_t size = read_LEB_unsigned(bytes, &pos, 32);
