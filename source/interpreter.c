@@ -138,6 +138,7 @@ bool interpret(Module *m) {
     Block *block;                   // 控制块
     uint8_t value_type;             // 控制块返回值的类型（根据当前版本的 Wasm 标准，控制块不能有参数，且最多只能有一个返回值）
     uint32_t cond;                  // 保存在操作数栈顶的判断条件的值
+    uint32_t depth;                 // 跳转指令的目标标签索引
 
     while (m->pc < m->byte_count) {
         opcode = bytes[m->pc];// 读取指令中的操作码
@@ -240,6 +241,8 @@ bool interpret(Module *m) {
                 m->pc = block->br_addr;
                 continue;
             case End_:
+                // 指令作用：控制块执行结束后，将关联的当前栈帧从调用栈顶中弹出，并根据具体情况决定是否退出虚拟机的执行
+
                 // 当前控制块（包含函数）执行结束后，将关联的当前栈帧从调用栈顶中弹出，
                 // 同时恢复该栈帧被压入调用栈顶前的运行时状态，例如 sp fp ra 等
                 block = pop_block(m);
@@ -261,6 +264,23 @@ bool interpret(Module *m) {
                     return true;
                 }
                 // 3. 当控制块的块类型为 block/loop/if，则继续执行下一条指令
+                continue;
+
+            /*
+             * 控制指令--跳转指令（4 条）
+             * */
+            case Br:
+                // 指令作用：跳转到目标控制块的跳转地址继续执行后面的指令
+
+                // 该指令的立即数表示跳转的目标标签索引（占 4 个字节）
+                // 另外该目标标签索引是相对的，例如为 0 表示该指令所在的控制块定义的跳转标签，
+                // 为 1 表示往外一层控制块定义的跳转标签，
+                // 为 2 表示再往外一层控制块定义的跳转标签，以此类推
+                depth = read_LEB_unsigned(bytes, &m->pc, 32);
+                // 将目标控制块关联的栈帧设置为当前栈帧
+                m->csp -= (int) depth;
+                // 跳转到目标控制块的跳转地址继续执行后面的指令
+                m->pc = m->callstack[m->csp].block->br_addr;
                 continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
