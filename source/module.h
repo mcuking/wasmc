@@ -53,7 +53,7 @@ typedef struct Type {
 // 控制块（包含函数）结构体
 typedef struct Block {
     uint8_t block_type;// 控制块类型，包含 5 种，分别是 0x00: function, 0x01: init_exp, 0x02: block, 0x03: loop, 0x04: if
-    Type *type;        // 控制块签名，即所有类型的控制块的返回值的数量和类型
+    Type *type;        // 控制块签名，即控制块的返回值的数量和类型
     uint32_t fidx;     // 函数在所有函数中的索引（仅针对控制块类型为函数的情况）
 
     uint32_t local_count;// 局部变量数量（仅针对控制块类型为函数的情况）
