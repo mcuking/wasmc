@@ -132,10 +132,12 @@ void setup_call(Module *m, uint32_t fidx) {
 // 虚拟机执行字节码中的指令流
 bool interpret(Module *m) {
     const uint8_t *bytes = m->bytes;// Wasm 二进制内容
+    StackValue *stack = m->stack;   // 操作数栈
     uint8_t opcode;                 // 操作码
     uint32_t cur_pc;                // 当前的程序计数器（即下一条即将执行的指令的地址）
     Block *block;                   // 控制块
     uint8_t value_type;             // 控制块返回值的类型（根据当前版本的 Wasm 标准，控制块不能有参数，且最多只能有一个返回值）
+    uint32_t cond;                  // 保存在操作数栈顶的判断条件的值
 
     while (m->pc < m->byte_count) {
         opcode = bytes[m->pc];// 读取指令中的操作码
@@ -181,6 +183,46 @@ bool interpret(Module *m) {
                 // 控制块（包含函数）被调用前，将【待调用的控制块（包含函数）关联的栈帧】压入到调用栈顶，成为当前栈帧，
                 // 同时保存该栈帧被压入调用栈顶前的运行时状态，例如 sp fp ra 等
                 push_block(m, block, m->sp);
+                continue;
+            case If:
+                // 指令作用：将当前控制块（if 类型）关联的栈帧压入到调用栈顶，成为当前栈帧
+
+                // 该指令的立即数为控制块的返回值类型（占 1 个字节）
+                // TODO: 暂时不需要控制块的返回值类型，故暂时忽略
+                value_type = read_LEB_unsigned(bytes, &m->pc, 32);
+                (void) value_type;
+
+                // 如果调用栈溢出，则报错并返回 false
+                if (m->csp >= CALLSTACK_SIZE) {
+                    sprintf(exception, "call stack exhausted");
+                    return false;
+                }
+
+                // 在 block_lookup 中根据 If 操作码的地址查找对应的控制块
+                // 注：block_lookup 索引就是控制块的起始地址，而控制块就是以 Block_/Loop/If 操作码为开头
+                block = m->block_lookup[cur_pc];
+
+                // 控制块（包含函数）被调用前，将【待调用的控制块（包含函数）关联的栈帧】压入到调用栈顶，成为当前栈帧，
+                // 同时保存该栈帧被压入调用栈顶前的运行时状态，例如 sp fp ra 等
+                push_block(m, block, m->sp);
+
+                // 从操作数栈顶获取判断条件的值
+                // 注：在调用 If 指令时，操作数栈顶保存的就是判断条件的值
+                cond = stack[m->sp--].value.uint32;
+                // 如果判断条件为 false，则将程序计数器 pc 设置为 else 控制块首地址或 if 控制块结尾地址，
+                // 即跳过 if 分支的代码对应的指令，执行后面的指令
+                if (cond == 0) {
+                    if (block->else_addr == 0) {
+                        // 如果不存在 else 分支，则跳转到 if 控制块结尾的下一条指令继续执行
+                        m->pc = block->br_addr + 1;
+                        // 在上面的 push_block 函数中 if 控制块对应的栈帧已经被压入到调用栈且调用栈顶索引 csp 加 1，
+                        // 此时不需要执行 if 控制块的指令，所以调用栈顶索引需要减 1
+                        m->csp -= 1;
+                    } else {
+                        // 如果存在 else 分支，则跳转 else 分支的控制块起始指令开始执行
+                        m->pc = block->else_addr;
+                    }
+                }
                 continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
