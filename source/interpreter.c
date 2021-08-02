@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-// 控制块（包含函数）被调用前，将【待调用的控制块（包含函数）关联的栈帧】压入到调用栈顶，成为当前栈帧，
+// 控制块（包含函数）被调用前，将关联的栈帧压入到调用栈顶，成为当前栈帧，
 // 同时保存该栈帧被压入调用栈顶前的运行时状态，例如 sp fp ra 等
 void push_block(Module *m, Block *block, int sp) {
     /* 1. 压入调用栈顶 */
@@ -37,7 +37,7 @@ void push_block(Module *m, Block *block, int sp) {
     m->callstack[m->csp].ra = m->pc;
 }
 
-// 当前控制块（包含函数）执行结束后，将【已执行结束的当前控制块（包含函数）关联的当前栈帧】从调用栈顶中弹出，
+// 当前控制块（包含函数）执行结束后，将关联的当前栈帧从调用栈顶中弹出，
 // 同时恢复该栈帧被压入调用栈顶前的运行时状态，例如 sp fp ra 等
 Block *pop_block(Module *m) {
     /* 1. 弹出调用栈顶 */
@@ -150,7 +150,7 @@ bool interpret(Module *m) {
              * */
             case Unreachable:
                 // 指令作用：引发运行时错误
-                // 当执行 Unreachable 操作码时，则报错并返回 false
+                // 当执行 Unreachable 操作码时，则报错并返回 false 退出虚拟机执行
                 sprintf(exception, "%s", "unreachable");
                 return false;
             case Nop:
@@ -170,7 +170,7 @@ bool interpret(Module *m) {
                 value_type = read_LEB_unsigned(bytes, &m->pc, 32);
                 (void) value_type;
 
-                // 如果调用栈溢出，则报错并返回 false
+                // 如果调用栈溢出，则报错并返回 false 退出虚拟机执行
                 if (m->csp >= CALLSTACK_SIZE) {
                     sprintf(exception, "call stack exhausted");
                     return false;
@@ -192,7 +192,7 @@ bool interpret(Module *m) {
                 value_type = read_LEB_unsigned(bytes, &m->pc, 32);
                 (void) value_type;
 
-                // 如果调用栈溢出，则报错并返回 false
+                // 如果调用栈溢出，则报错并返回 false 退出虚拟机执行
                 if (m->csp >= CALLSTACK_SIZE) {
                     sprintf(exception, "call stack exhausted");
                     return false;
@@ -238,6 +238,29 @@ bool interpret(Module *m) {
                 // 注：当上一个分支对应的指令流执行完成后，会执行到 Else_ 指令，则需要跳过 Else_ 指令后面的 else 分支对应的指令流，
                 // 直接执行控制块的结尾指令，可以看出 Else_ 指令起到了分隔多个分支对应的指令流的作用
                 m->pc = block->br_addr;
+                continue;
+            case End_:
+                // 当前控制块（包含函数）执行结束后，将关联的当前栈帧从调用栈顶中弹出，
+                // 同时恢复该栈帧被压入调用栈顶前的运行时状态，例如 sp fp ra 等
+                block = pop_block(m);
+
+                // 如果 pop_block 函数返回 NULL，则说明有报错（具体逻辑可查看 pop_block 函数），
+                // 则直接返回 false 退出虚拟机执行
+                if (block == NULL) {
+                    return false;
+                }
+
+                if (block->block_type == 0x00) {
+                    // 1. 当控制块类型为函数时，且调用栈为空（即 csp 为 -1），说明已经执行完顶层的控制块，
+                    // 则直接返回 true 退出虚拟机执行，否则继续执行下一条指令
+                    if (m->csp == -1) {
+                        return true;
+                    }
+                } else if (block->block_type == 0x01) {
+                    // 2. 当控制块类型为初始化表达式时，说明只有一层控制块调用，则直接返回 true 退出虚拟机执行即可
+                    return true;
+                }
+                // 3. 当控制块的块类型为 block/loop/if，则继续执行下一条指令
                 continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
