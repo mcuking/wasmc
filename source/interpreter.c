@@ -1,5 +1,6 @@
 #include "interpreter.h"
 #include "module.h"
+#include "opcode.h"
 #include "utils.h"
 #include <stdbool.h>
 #include <stdio.h>
@@ -130,6 +131,34 @@ void setup_call(Module *m, uint32_t fidx) {
 
 // 虚拟机执行字节码中的指令流
 bool interpret(Module *m) {
+    const uint8_t *bytes = m->bytes;// Wasm 二进制内容
+    uint8_t opcode;                 // 操作码
+    uint32_t cur_pc;                // 当前的程序计数器（即下一条即将执行的指令的地址）
+
+    while (m->pc < m->byte_count) {
+        opcode = bytes[m->pc];// 读取指令中的操作码
+        cur_pc = m->pc;       // 保存程序计数器的值（即下一条即将执行的指令的地址）
+        m->pc += 1;           // 程序计数器加 1，即指向下一条指令
+
+        switch (opcode) {
+            /*
+             * 控制指令--其他指令（2 条）
+             * */
+            case Unreachable:
+                // 指令作用：引发运行时错误
+                // 当执行 Unreachable 操作码时，则报错并返回 false
+                sprintf(exception, "%s", "unreachable");
+                return false;
+            case Nop:
+                // 指令作用：什么都不做
+                // 注：Nop 即 No Operation 缩写
+                continue;
+            default:
+                // 无法识别的非法操作码（不在 Wasm 规定的字节码）
+                return false;
+        }
+    }
+
     // 正常情况不会执行到这里
     return false;
 }
@@ -178,5 +207,5 @@ void run_init_expr(Module *m, uint8_t type, uint32_t *pc) {
     // 初始化表达式的字节码中的指令流执行完成后，操作数栈顶保存的就是指令流的执行结果，也就是初始化表达式计算的返回值
     // 由于初始化表达式计算一定会有返回值，且目前版本的 Wasm 规范规定控制块最多只能有一个返回值，所以初始化表达式计算必定会有一个返回值
     // 所以可以通过比对保存在操作数栈顶的值类型和参数 type 是否相同，来判断计算得到的返回值的类型是否正确
-    ASSERT(m->stack[m->sp].value_type == type, "init_expr type mismatch 0x%x != 0x%x", m->stack[m->sp].value_type, type);
+    ASSERT(m->stack[m->sp].value_type == type, "init_expr type mismatch 0x%x != 0x%x", m->stack[m->sp].value_type, type)
 }
