@@ -282,6 +282,24 @@ bool interpret(Module *m) {
                 // 跳转到目标控制块的跳转地址继续执行后面的指令
                 m->pc = m->callstack[m->csp].block->br_addr;
                 continue;
+            case BrIf:
+                // 指令作用：根据判断条件决定是否跳转到目标控制块的跳转地址继续执行后面的指令
+
+                // 该指令的立即数表示跳转的目标标签索引（占 4 个字节）
+                // 另外该目标标签索引是相对的，例如为 0 表示该指令所在的控制块定义的跳转标签，
+                // 为 1 表示往外一层控制块定义的跳转标签，
+                // 为 2 表示再往外一层控制块定义的跳转标签，以此类推
+                depth = read_LEB_unsigned(bytes, &m->pc, 32);
+                // 将操作数栈顶值弹出，作为判断条件
+                cond = stack[m->sp--].value.uint32;
+                // 如果为真则跳转，否则不跳转
+                if (cond) {
+                    // 将目标控制块关联的栈帧设置为当前栈帧
+                    m->csp -= (int) depth;
+                    // 跳转到目标控制块的跳转地址继续执行后面的指令
+                    m->pc = m->callstack[m->csp].block->br_addr;
+                }
+                continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
                 return false;
