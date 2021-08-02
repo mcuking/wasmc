@@ -219,10 +219,25 @@ bool interpret(Module *m) {
                         // 此时不需要执行 if 控制块的指令，所以调用栈顶索引需要减 1
                         m->csp -= 1;
                     } else {
-                        // 如果存在 else 分支，则跳转 else 分支的控制块起始指令开始执行
+                        // 如果存在 else 分支，则执行 else 分支代码对应的字节码的起始指令，也是 Else_ 指令的下一条指令
                         m->pc = block->else_addr;
                     }
                 }
+                continue;
+
+            /*
+             * 控制指令--伪指令（2 条）
+             * 注：Else_ 和 End 指令只起分隔作用，故称为伪指令
+             * */
+            case Else_:
+                // 指令作用：跳转到控制块的结尾指令继续执行
+
+                // 获取当前栈帧对应的控制块
+                block = m->callstack[m->csp].block;
+                // 跳转到控制块的结尾指令继续执行
+                // 注：当上一个分支对应的指令流执行完成后，会执行到 Else_ 指令，则需要跳过 Else_ 指令后面的 else 分支对应的指令流，
+                // 直接执行控制块的结尾指令，可以看出 Else_ 指令起到了分隔多个分支对应的指令流的作用
+                m->pc = block->br_addr;
                 continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
