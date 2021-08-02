@@ -134,6 +134,8 @@ bool interpret(Module *m) {
     const uint8_t *bytes = m->bytes;// Wasm 二进制内容
     uint8_t opcode;                 // 操作码
     uint32_t cur_pc;                // 当前的程序计数器（即下一条即将执行的指令的地址）
+    Block *block;                   // 控制块
+    uint8_t value_type;             // 控制块返回值的类型（根据当前版本的 Wasm 标准，控制块不能有参数，且最多只能有一个返回值）
 
     while (m->pc < m->byte_count) {
         opcode = bytes[m->pc];// 读取指令中的操作码
@@ -152,6 +154,33 @@ bool interpret(Module *m) {
             case Nop:
                 // 指令作用：什么都不做
                 // 注：Nop 即 No Operation 缩写
+                continue;
+
+            /*
+             * 控制指令--结构化控制指令（3 条）
+             * */
+            case Block_:
+            case Loop:
+                // 指令作用：将当前控制块（block 或 loop 类型）关联的栈帧压入到调用栈顶，成为当前栈帧
+
+                // 该指令的立即数为控制块的返回值类型（占 1 个字节）
+                // TODO: 暂时不需要控制块的返回值类型，故暂时忽略
+                value_type = read_LEB_unsigned(bytes, &m->pc, 32);
+                (void) value_type;
+
+                // 如果调用栈溢出，则报错并返回 false
+                if (m->csp >= CALLSTACK_SIZE) {
+                    sprintf(exception, "call stack exhausted");
+                    return false;
+                }
+
+                // 在 block_lookup 中根据 Loop/Block_ 操作码的地址查找对应的控制块
+                // 注：block_lookup 索引就是控制块的起始地址，而控制块就是以 Block_/Loop/If 操作码为开头
+                block = m->block_lookup[cur_pc];
+
+                // 控制块（包含函数）被调用前，将【待调用的控制块（包含函数）关联的栈帧】压入到调用栈顶，成为当前栈帧，
+                // 同时保存该栈帧被压入调用栈顶前的运行时状态，例如 sp fp ra 等
+                push_block(m, block, m->sp);
                 continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）

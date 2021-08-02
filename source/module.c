@@ -23,7 +23,7 @@ void skip_immediate(const uint8_t *bytes, uint32_t *pos) {
         case Block_:
         case Loop:
         case If:
-            // Block_/Loop/If 指令的立即数有两部分，第一部分表示控制块的类型（占 1 个字节），
+            // Block_/Loop/If 指令的立即数有两部分，第一部分表示控制块的返回值类型（占 1 个字节），
             // 第二部分为子表达式（Block_/Loop 有一个子表达式，If 有两个子表达式）
             // 注：子表达式无需跳过，因为 find_block 主要就是要从控制块的表达式（包括子表达式）收集控制块的相关信息
             read_LEB_unsigned(bytes, pos, 7);
