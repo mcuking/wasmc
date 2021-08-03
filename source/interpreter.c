@@ -551,7 +551,7 @@ bool interpret(Module *m) {
 
             /*
              * 内存指令--内存加载指令（14 条）
-             * 指令作用：从内存中加载数据，转换为适当类型的值，再压入操作数栈
+             * 指令作用：从内存中加载数据，转换为适当类型的值，再压入操作数栈顶
              * */
             case I32Load ... I64Load32U:
                 // 内存加载和存储指令都带有两个立即数：1.对齐方式 2.内存偏移量
@@ -566,10 +566,10 @@ bool interpret(Module *m) {
                 // 从操作数栈顶弹出一个 i32 类型的数，和内存偏移量 offset 相加，就可以得到实际内存相对地址
                 // 注：操作数栈顶弹出的数和内存偏移量都是 32 位无符号整数，所以 Wasm 实际拥有 33 比特的地址空间
                 offset = read_LEB_unsigned(bytes, &m->pc, 32);
-                // 从操作数栈顶弹出一个 i32 类型的数（用于计算实际内存地址）
+                // 从操作数栈顶弹出一个 i32 类型的数（用于获取实际内存地址）
                 addr = stack[m->sp--].value.uint32;
 
-                // 计算实际内存地址
+                // 获取实际内存地址
                 maddr = m->memory.bytes + offset + addr;
 
                 // TODO: 忽略校验 offset/addr/maddr 值的合法性
@@ -659,6 +659,77 @@ bool interpret(Module *m) {
                         // 因为是无符号数，在转换为更大的数据类型时, 只需简单地在开头添加 0 占位，无需特殊转换
                         memcpy(&stack[m->sp].value, maddr, 4);
                         stack[m->sp].value_type = I64;
+                        break;
+                    default:
+                        break;
+                }
+                continue;
+
+            /*
+             * 内存指令--内存存储指令（9 条）
+             * 指令作用：将操作数栈顶值弹出并存储到内存中
+             * */
+            case I32Store ... I64Store32:
+                // 内存加载和存储指令都带有两个立即数：1.对齐方式 2.内存偏移量
+
+                // 第一个立即数表示对齐方式
+                // 保存的是以 2 为底，对齐字节数的对数，占 4 个字节
+                // 例如 0 表示一字节（2^0）对齐，1 表示两字节（2^1）对齐，2 表示四字节（2^2）对齐
+                // 对齐方式只起提示作用，目的是帮助 JIT/AOT 编译器生成更优化的机器代码，对实际执行结果没有任何影响，暂时忽略
+                read_LEB_unsigned(bytes, &m->pc, 32);
+
+                // 第二个立即数表示内存偏移量
+                // 从操作数栈顶弹出一个 i32 类型的数，和内存偏移量 offset 相加，就可以得到实际内存相对地址
+                // 注：操作数栈顶弹出的数和内存偏移量都是 32 位无符号整数，所以 Wasm 实际拥有 33 比特的地址空间
+                offset = read_LEB_unsigned(bytes, &m->pc, 32);
+
+                // 获取操作数栈顶地址，并将栈顶弹出
+                StackValue *sval = &stack[m->sp--];
+
+                // 再从操作数栈顶弹出一个 i32 类型的数（用于获取实际内存地址）
+                addr = stack[m->sp--].value.uint32;
+                // 获取实际内存地址
+                maddr = m->memory.bytes + offset + addr;
+
+                // TODO: 忽略校验 offset/addr/maddr 值的合法性
+
+                // 根据具体指令将数操作数栈顶值拷贝到实际内存地址
+                switch (opcode) {
+                    case I32Store:
+                        // 将操作数栈顶值（栈顶值类型为 32 位整数）的前 4 个字节拷贝到实际内存地址
+                        memcpy(maddr, &sval->value.uint32, 4);
+                        break;
+                    case I64Store:
+                        // 将操作数栈顶值（栈顶值类型为 64 位整数）的前 8 个字节拷贝到实际内存地址
+                        memcpy(maddr, &sval->value.uint64, 8);
+                        break;
+                    case F32Store:
+                        // 将操作数栈顶值（栈顶值类型为 32 位浮点数）的前 4 个字节拷贝到实际内存地址
+                        memcpy(maddr, &sval->value.f32, 4);
+                        break;
+                    case F64Store:
+                        // 将操作数栈顶值（栈顶值类型为 64 位浮点数）的前 8 个字节拷贝到实际内存地址
+                        memcpy(maddr, &sval->value.f64, 8);
+                        break;
+                    case I32Store8:
+                        // 将操作数栈顶值（栈顶值类型为 32 位整数）的前 1 个字节拷贝到实际内存地址
+                        memcpy(maddr, &sval->value.uint32, 1);
+                        break;
+                    case I32Store16:
+                        // 将操作数栈顶值（栈顶值类型为 32 位整数）的前 2 个字节拷贝到实际内存地址
+                        memcpy(maddr, &sval->value.uint32, 2);
+                        break;
+                    case I64Store8:
+                        // 将操作数栈顶值（栈顶值类型为 64 位整数）的前 1 个字节拷贝到实际内存地址
+                        memcpy(maddr, &sval->value.uint64, 1);
+                        break;
+                    case I64Store16:
+                        // 将操作数栈顶值（栈顶值类型为 64 位整数）的前 2 个字节拷贝到实际内存地址
+                        memcpy(maddr, &sval->value.uint64, 2);
+                        break;
+                    case I64Store32:
+                        // 将操作数栈顶值（栈顶值类型为 64 位整数）的前 4 个字节拷贝到实际内存地址
+                        memcpy(maddr, &sval->value.uint64, 4);
                         break;
                     default:
                         break;
