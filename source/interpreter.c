@@ -782,6 +782,39 @@ bool interpret(Module *m) {
                 m->memory.cur_size += delta;
                 m->memory.bytes = arecalloc(m->memory.bytes, prev_pages * PAGE_SIZE, m->memory.cur_size * PAGE_SIZE, sizeof(uint8_t), "Module->memory.bytes");
                 continue;
+
+            /*
+             * 数值指令--常量指令(4 条)
+             * 注：数值指令中除了常量指令之外，其余的数值指令都没有立即数
+             * */
+            case I32Const:
+                // 指令作用：将指令的立即数以 i32 类型压入操作数栈顶
+                stack[++m->sp].value_type = I32;
+                stack[m->sp].value.uint32 = read_LEB_signed(bytes, &m->pc, 32);
+                continue;
+            case I64Const:
+                // 指令作用：将指令的立即数以 i64 类型压入操作数栈顶
+                stack[++m->sp].value_type = I64;
+                stack[m->sp].value.int64 = (int64_t)read_LEB_signed(bytes, &m->pc, 64);
+                continue;
+            case F32Const:
+                // 指令作用：将指令的立即数以 f32 类型压入操作数栈顶
+                stack[++m->sp].value_type = F32;
+                // LEB128 编码仅针对整数，而该指令的立即数为浮点数，并没有被编码，而是直接写入到 Wasm 二进制文件中的
+                memcpy(&stack[m->sp].value.uint32, bytes + m->pc, 4);
+                // 由于是直接将 4 个字节长度的立即数的值拷贝到栈顶，
+                // 没有调用 read_LEB_signed（该函数会实时更新 pc 保存的值），所以程序计数器需要手动加 4
+                m->pc += 4;
+                continue;
+            case F64Const:
+                // 指令作用：将指令的立即数以 f64 类型压入操作数栈顶
+                stack[++m->sp].value_type = F64;
+                // LEB128 编码仅针对整数，而该指令的立即数为浮点数，并没有被编码，而是直接写入到 Wasm 二进制文件中的
+                memcpy(&stack[m->sp].value.uint64, bytes + m->pc, 8);
+                // 由于是直接将 8 个字节长度的立即数的值拷贝到栈顶，
+                // 没有调用 read_LEB_signed（该函数会实时更新 pc 保存的值），所以程序计数器需要手动加 8
+                m->pc += 8;
+                continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
                 return false;
