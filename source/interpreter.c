@@ -342,6 +342,17 @@ bool interpret(Module *m) {
                 m->pc = m->callstack[m->csp].block->br_addr;
                 continue;
             }
+            case Return:
+                // 指令作用：直接跳出最外层控制块，最终效果是函数返回
+
+                // 循环向外层控制块跳转，直到跳转到当前函数对应的控制块（也就是循环条件中判断是否是函数类型的代码块）
+                while (m->csp >= 0 && m->callstack[m->csp].block->block_type != 0x00) {
+                    m->csp--;
+                }
+                // 直接跳到当前函数对应的控制块结尾处，即 End_ 指令处并执行该指令
+                // 对应的当前栈帧弹出调用栈和退出虚拟机执行 是在 End_ 指令执行逻辑中
+                m->pc = m->callstack[m->csp].block->end_addr;
+                continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
                 return false;
