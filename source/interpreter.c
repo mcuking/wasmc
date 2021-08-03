@@ -53,7 +53,7 @@ Block *pop_block(Module *m) {
     // 如果控制块的返回值数量为 1，也就是有一个返回值时，需要对返回值类型进行校验
     if (t->result_count == 1) {
         // 获取当前栈帧的操作数栈顶值，也就是控制块（包含函数）的返回值，
-        // 判断其类型和【控制块签名中的返回值类型】是否一致，如果不一致则报错
+        // 判断其类型和【控制块签名中的返回值类型】是否一致，如果不一致则记录异常信息
         if (m->stack[m->sp].value_type != t->results[0]) {
             sprintf(exception, "call type mismatch");
             return NULL;
@@ -151,7 +151,7 @@ bool interpret(Module *m) {
              * */
             case Unreachable:
                 // 指令作用：引发运行时错误
-                // 当执行 Unreachable 操作码时，则报错并返回 false 退出虚拟机执行
+                // 当执行 Unreachable 操作码时，则记录异常信息并返回 false 退出虚拟机执行
                 sprintf(exception, "%s", "unreachable");
                 return false;
             case Nop:
@@ -171,7 +171,7 @@ bool interpret(Module *m) {
                 value_type = read_LEB_unsigned(bytes, &m->pc, 32);
                 (void) value_type;
 
-                // 如果调用栈溢出，则报错并返回 false 退出虚拟机执行
+                // 如果调用栈溢出，则记录异常信息并返回 false 退出虚拟机执行
                 if (m->csp >= CALLSTACK_SIZE) {
                     sprintf(exception, "call stack exhausted");
                     return false;
@@ -193,7 +193,7 @@ bool interpret(Module *m) {
                 value_type = read_LEB_unsigned(bytes, &m->pc, 32);
                 (void) value_type;
 
-                // 如果调用栈溢出，则报错并返回 false 退出虚拟机执行
+                // 如果调用栈溢出，则记录异常信息并返回 false 退出虚拟机执行
                 if (m->csp >= CALLSTACK_SIZE) {
                     sprintf(exception, "call stack exhausted");
                     return false;
@@ -247,7 +247,7 @@ bool interpret(Module *m) {
                 // 同时恢复该栈帧被压入调用栈顶前的运行时状态，例如 sp fp ra 等
                 block = pop_block(m);
 
-                // 如果 pop_block 函数返回 NULL，则说明有报错（具体逻辑可查看 pop_block 函数），
+                // 如果 pop_block 函数返回 NULL，则说明有异常（具体逻辑可查看 pop_block 函数），
                 // 则直接返回 false 退出虚拟机执行
                 if (block == NULL) {
                     return false;
@@ -300,6 +300,48 @@ bool interpret(Module *m) {
                     m->pc = m->callstack[m->csp].block->br_addr;
                 }
                 continue;
+            case BrTable: {
+                // 指令作用：根据运行时具体情况决定跳转到哪个目标控制块的跳转地址继续执行后面的指令
+
+                // 该指令的立即数给定了 n+1 个跳转目标标签索引
+                // 其中前 n 个目标标签索引构成一个索引表，后一个标签索引为默认索引
+                // 最终跳转到哪一个目标标签索引，需要在运行期间才能决定
+
+                // 该指令执行时，先从操作数栈顶弹出一个 i32 类型的值 m，
+                // 如果 m 小于 n，则跳转到索引表第 m 个索引指向的目标标签处，
+                // 否则跳转到默认索引指定的标签处
+
+                // 读取目标标签索引的数量，也就是索引表的大小
+                uint32_t count = read_LEB_unsigned(bytes, &m->pc, 32);
+
+                // 如果索引表超出了规定的最大值，则记录异常信息并直接返回 false 退出虚拟机执行
+                if (count > BR_TABLE_SIZE) {
+                    sprintf(exception, "br_table size %d exceeds max %d\n", count, BR_TABLE_SIZE);
+                    return false;
+                }
+
+                // 构造索引表
+                for (uint32_t n = 0; n < count; n++) {
+                    m->br_table[n] = read_LEB_unsigned(bytes, &m->pc, 32);
+                }
+
+                // 读取默认索引
+                depth = read_LEB_unsigned(bytes, &m->pc, 32);
+
+                // 从操作数栈顶弹出一个 i32 类型的值 m
+                int32_t didx = stack[m->sp--].value.int32;
+                // 如果 m 小于索引表大小 n，则跳转到索引表第 m 个索引指向的目标标签处，
+                // 否则跳转到默认索引指定的标签处
+                if (didx >= 0 && didx < (int32_t) count) {
+                    depth = m->br_table[didx];
+                }
+
+                // 将目标控制块关联的栈帧设置为当前栈帧
+                m->csp -= (int) depth;
+                // 跳转到目标控制块的跳转地址继续执行后面的指令
+                m->pc = m->callstack[m->csp].block->br_addr;
+                continue;
+            }
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
                 return false;
