@@ -139,6 +139,7 @@ bool interpret(Module *m) {
     uint8_t value_type;             // 控制块返回值的类型（根据当前版本的 Wasm 标准，控制块不能有参数，且最多只能有一个返回值）
     uint32_t cond;                  // 保存在操作数栈顶的判断条件的值
     uint32_t depth;                 // 跳转指令的目标标签索引
+    uint32_t fidx;                  // 函数索引
 
     while (m->pc < m->byte_count) {
         opcode = bytes[m->pc];// 读取指令中的操作码
@@ -352,6 +353,35 @@ bool interpret(Module *m) {
                 // 直接跳到当前函数对应的控制块结尾处，即 End_ 指令处并执行该指令
                 // 对应的当前栈帧弹出调用栈和退出虚拟机执行 是在 End_ 指令执行逻辑中
                 m->pc = m->callstack[m->csp].block->end_addr;
+                continue;
+
+            /*
+             * 控制指令----函数调用指令（2 条）
+             * */
+            case Call:
+                // 指令作用：调用指定函数
+                // 注：Call 指令要调用的函数是在编译期确定的，也就是说被调用函数的索引硬编码在 call 指令的立即数中
+
+                // 读取该指令的立即数，也就是被调用函数的索引（占 4 个字节）
+                fidx = read_LEB_unsigned(bytes, &m->pc, 32);
+
+                // 如果函数索引值小于 m->import_func_count，则说明该函数为外部函数
+                // 原因：在解析 Wasm 二进制文件内容时，首先解析导入段中的函数到 m->functions，然后再解析函数段中的函数到 m->functions
+                if (fidx < m->import_func_count) {
+                    // TODO: 暂时忽略调用外部引入函数情况
+                } else {
+                    // 如果调用栈溢出，则记录异常信息并返回 false 退出虚拟机执行
+                    if (m->csp >= CALLSTACK_SIZE) {
+                        sprintf(exception, "call stack exhausted");
+                        return false;
+                    }
+
+                    // 调用函数前的设置，主要设置内容如下：
+                    // 1. 将当前函数关联的栈帧压入到调用栈顶成为当前栈帧，同时保存该栈帧被压入调用栈顶前的运行时状态，例如 sp fp ra 等
+                    // 2. 将当前函数的局部变量压入到操作数栈顶（默认初始值为 0）
+                    // 3. 将函数的字节码部分的【起始地址】设置为 pc（即下一条待执行指令的地址），即开始执行函数字节码中的指令流
+                    setup_call(m, fidx);
+                }
                 continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
