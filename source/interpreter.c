@@ -735,6 +735,20 @@ bool interpret(Module *m) {
                         break;
                 }
                 continue;
+            /*
+             * 内存指令--size 指令
+             * */
+            case MemorySize:
+                // 指令作用：将当前的内存页数以 i32 类型压入操作数栈顶
+
+                // 该指令的立即数表示当前操作的是第几块内存（占 1 个内存）
+                // 但由于当前 Wasm 规范规定最多只能导入或定义一块内存，所以目前必须为 0
+                read_LEB_unsigned(bytes, &m->pc, 32);
+
+                // 将当前的内存页数以 i32 类型压入操作数栈顶
+                stack[++m->sp].value_type = I32;
+                stack[m->sp].value.uint32 = m->memory.cur_size;
+                continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
                 return false;
