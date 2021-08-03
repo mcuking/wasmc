@@ -454,6 +454,14 @@ bool interpret(Module *m) {
                 }
                 continue;
             }
+
+            /*
+             * 参数指令（2 条）
+             * */
+            case Drop:
+                // 指令作用：丢弃操作数栈顶值
+                m->sp--;
+                continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
                 return false;
