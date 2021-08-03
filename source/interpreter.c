@@ -735,6 +735,7 @@ bool interpret(Module *m) {
                         break;
                 }
                 continue;
+
             /*
              * 内存指令--size 指令
              * */
@@ -748,6 +749,38 @@ bool interpret(Module *m) {
                 // 将当前的内存页数以 i32 类型压入操作数栈顶
                 stack[++m->sp].value_type = I32;
                 stack[m->sp].value.uint32 = m->memory.cur_size;
+                continue;
+
+            /*
+             * 内存指令--grow 指令
+             * */
+            case MemoryGrow:
+                // 指令作用：将内存增长若干页，并从操作数栈顶获取增长前的内存页数
+
+                // 该指令的立即数表示当前操作的是第几块内存（占 1 个内存）
+                // 但由于当前 Wasm 规范规定最多只能导入或定义一块内存，所以目前必须为 0
+                read_LEB_unsigned(bytes, &m->pc, 32);
+
+                // 先保存当前内存页数
+                uint32_t prev_pages = m->memory.cur_size;
+
+                // 将操作数栈顶值作为内存要增长的页数
+                uint32_t delta = stack[m->sp].value.uint32;
+
+                // 用刚刚保存的当前内存页数覆盖当前操作数栈顶值
+                stack[m->sp].value.uint32 = prev_pages;
+
+                // 校验内存增长页数是否合法
+                if (delta == 0 || delta + prev_pages > m->memory.max_size) {
+                    // 如果内存增长页数为 0，
+                    // 或者内存增长页数加上当前内存页数后，超过了内存最大页数，
+                    // 则什么都不做，执行下一条指令
+                    continue;
+                }
+
+                // 如果内存增长页数合法，则增加 delta 页内存
+                m->memory.cur_size += delta;
+                m->memory.bytes = arecalloc(m->memory.bytes, prev_pages * PAGE_SIZE, m->memory.cur_size * PAGE_SIZE, sizeof(uint8_t), "Module->memory.bytes");
                 continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
