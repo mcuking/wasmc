@@ -521,7 +521,7 @@ bool interpret(Module *m) {
                 // 弹出操作数栈顶的值，将其保存到指定局部变量中（注意：不弹出栈顶值）
                 stack[m->fp + idx] = stack[m->sp];
                 continue;
-                
+
             /*
              * 变量指令--全局变量指令（2 条）
              * 指令作用：读写全局变量
@@ -534,6 +534,15 @@ bool interpret(Module *m) {
 
                 // 将指定局部变量的值压入到操作数栈顶
                 stack[++m->sp] = m->globals[idx];
+                continue;
+            case GlobalSet:
+                // 指令作用：操作数栈顶的值弹出并保存到指定全局变量中
+
+                // 该指令的立即数为全局变量的索引
+                idx = read_LEB_unsigned(bytes, &m->pc, 32);
+
+                // 弹出操作数栈顶的值，将其保存到指定全局变量中
+                m->globals[idx] = stack[m->sp--];
                 continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
