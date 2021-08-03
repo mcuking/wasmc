@@ -10,6 +10,7 @@
 #define STACK_SIZE 0x10000    // 操作数栈的容量 65536，即 64 * 1024，也就是 64KB
 #define CALLSTACK_SIZE 0x1000 // 调用栈的容量 4096，即 4 * 1024，也就是 4KB
 #define BLOCKSTACK_SIZE 0x1000// 控制块栈的容量 4096，即 4 * 1024，也就是 4KB
+#define BR_TABLE_SIZE 0x10000 // 跳转指令索引表大小 65536，即 64 * 1024，也就是 64KB
 
 #define I32 0x7f    // -0x01
 #define I64 0x7e    // -0x02
@@ -170,12 +171,13 @@ typedef struct Module {
     uint32_t start_function;// 起始函数在本地模块所有函数中索引，而起始函数是在【模块完成初始化后】，【被导出函数可调用之前】自动被调用的函数
 
     // 下面属性用于记录运行时（即栈式虚拟机执行指令流的过程）状态，相关背景知识请查看上面栈帧结构体的注释
-    uint32_t pc;                    // program counter 程序计数器，记录下一条即将执行的指令的地址
-    int sp;                         // operand stack pointer 操作数栈顶指针，指向完整的操作数栈顶（注：所有栈帧共享一个完整的操作数栈，分别占用其中的某一部分）
-    int fp;                         // current frame pointer into stack 当前栈帧的帧指针，指向当前栈帧的操作数栈底
-    StackValue stack[STACK_SIZE];   // operand stack 操作数栈，用于存储参数、局部变量、操作数
-    int csp;                        // callstack pointer 调用栈指针，保存处在调用栈顶的栈帧索引，即当前栈帧在调用栈中的索引
-    Frame callstack[CALLSTACK_SIZE];// callstack 调用栈，用于存储栈帧
+    uint32_t pc;                     // program counter 程序计数器，记录下一条即将执行的指令的地址
+    int sp;                          // operand stack pointer 操作数栈顶指针，指向完整的操作数栈顶（注：所有栈帧共享一个完整的操作数栈，分别占用其中的某一部分）
+    int fp;                          // current frame pointer into stack 当前栈帧的帧指针，指向当前栈帧的操作数栈底
+    StackValue stack[STACK_SIZE];    // operand stack 操作数栈，用于存储参数、局部变量、操作数
+    int csp;                         // callstack pointer 调用栈指针，保存处在调用栈顶的栈帧索引，即当前栈帧在调用栈中的索引
+    Frame callstack[CALLSTACK_SIZE]; // callstack 调用栈，用于存储栈帧
+    uint32_t br_table[BR_TABLE_SIZE];// 跳转指令索引表
 } Module;
 
 // 解析 Wasm 二进制文件内容，将其转化成内存格式 Module
