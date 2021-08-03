@@ -140,6 +140,7 @@ bool interpret(Module *m) {
     uint32_t cond;                  // 保存在操作数栈顶的判断条件的值
     uint32_t depth;                 // 跳转指令的目标标签索引
     uint32_t fidx;                  // 函数索引
+    uint32_t idx;                   // 变量索引
 
     while (m->pc < m->byte_count) {
         opcode = bytes[m->pc];// 读取指令中的操作码
@@ -483,6 +484,24 @@ bool interpret(Module *m) {
                 if (!cond) {
                     stack[m->sp] = stack[m->sp + 1];
                 }
+                continue;
+
+            /*
+             * 变量指令--局部变量指令（3 条）
+             * 指令作用：读写函数的参数和局部变量
+             *
+             * 注：每个函数关联的栈帧拥有一段操作数栈（多个函数栈帧共享同一个大的操作数栈），
+             * 该函数栈帧的操作数栈的开头就存储局部变量，
+             * 所以可以通过【函数栈帧的操作数栈底】加上【局部变量索引】来定位到该局部变量，即 m->fp + idx
+             * */
+            case LocalGet:
+                // 指令作用：将指定局部变量压入到操作数栈顶
+
+                // 该指令的立即数为局部变量的索引
+                idx = read_LEB_unsigned(bytes, &m->pc, 32);
+
+                // 将对应的局部变量的值压入到栈顶
+                stack[++m->sp] = stack[m->fp + idx];
                 continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
