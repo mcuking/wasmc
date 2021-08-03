@@ -17,9 +17,9 @@ void skip_immediate(const uint8_t *bytes, uint32_t *pos) {
     *pos = *pos + 1;
     // 根据操作码类型，判断其有占多少位的立即数（或者没有立即数），并直接跳过该立即数
     switch (opcode) {
-        //
-        // 控制指令
-        //
+        /*
+         * 控制指令
+         * */
         case Block_:
         case Loop:
         case If:
@@ -54,9 +54,9 @@ void skip_immediate(const uint8_t *bytes, uint32_t *pos) {
             read_LEB_unsigned(bytes, pos, 1);
             break;
 
-        //
-        // 变量指令
-        //
+        /*
+         * 变量指令
+         * */
         case LocalGet:
         case LocalSet:
         case LocalTee:
@@ -66,9 +66,9 @@ void skip_immediate(const uint8_t *bytes, uint32_t *pos) {
             read_LEB_unsigned(bytes, pos, 32);
             break;
 
-        //
-        // 内存指令
-        //
+        /*
+         * 内存指令
+         * */
         case I32Load ... I64Store32:
             // 内存加载/存储指令有两个立即数，第一个立即数表示内存偏移量（占 4 个字节），
             // 第二个立即数表示对齐提示（占 4 个字节）
@@ -100,7 +100,7 @@ void skip_immediate(const uint8_t *bytes, uint32_t *pos) {
             break;
         default:
             // 其他操作码没有立即数
-            // 注：Wasm 指令大部分指令均没有立即数
+            // 注：Wasm 指令大部分指令没有立即数
             break;
     }
 }

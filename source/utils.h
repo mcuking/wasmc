@@ -54,4 +54,22 @@ uint64_t get_type_mask(Type *type);
 // 注：目前多返回值提案还没有进入 Wasm 标准，根据当前版本的 Wasm 标准，控制块不能有参数，且最多只能有一个返回值
 Type *get_block_type(uint8_t value_type);
 
+// 符号扩展 (sign extension)
+// 分以下两种情况：
+// 1. 将无符号数转换为更大的数据类型：
+// 只需简单地在开头添加 0 至所需位数，这种运算称为 0 扩展
+// 2. 将有符号数转换为更大的数据类型：
+// 需要执行符号扩展，规则是将符号位扩展至所需的位数，即符号位为 0 时在开头添加 0 至所需位数，符号位为 1 时在开头添加 1 至所需位数，
+// 例如 char: 1000 0000  --> short: 1111 1111 1000 0000
+
+void sext_8_32(uint32_t *val);
+
+void sext_16_32(uint32_t *val);
+
+void sext_8_64(uint64_t *val);
+
+void sext_16_64(uint64_t *val);
+
+void sext_32_64(uint64_t *val);
+
 #endif
