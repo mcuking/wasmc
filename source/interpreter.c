@@ -383,6 +383,77 @@ bool interpret(Module *m) {
                     setup_call(m, fidx);
                 }
                 continue;
+            case CallIndirect: {
+                // 指令作用：根据运行期间操作数栈顶的值调用指定函数
+                // 注：在编译期只能确定被调用函数的类型（call_indirect 指令的立即数里存放的是被调用函数的类型索引），
+                // 具体调用哪个函数只有在运行期间根据操作数栈顶的值才能确定
+
+                // 第一个立即数表示被调用函数的类型索引（占 4 个字节）
+                uint32_t tidx = read_LEB_unsigned(bytes, &m->pc, 32);
+
+                // 第二个立即数为保留立即数（占 1 个比特位）
+                read_LEB_unsigned(bytes, &m->pc, 1);
+
+                // 操作数栈顶保存的值是【函数索引值】在表 table 中的索引
+                uint32_t val = stack[m->sp--].value.uint32;
+                // 如果该值大于或等于表 table 的最大值，则记录异常信息并返回 false 退出虚拟机执行
+                if (val >= m->table.max_size) {
+                    sprintf(exception, "undefined element 0x%x (max: 0x%x) in table", val, m->table.max_size);
+                    return false;
+                }
+
+                // 从表 table 中读取【函数索引值】
+                fidx = m->table.entries[val];
+
+                // 如果函数索引值小于 m->import_func_count，则说明该函数为外部函数
+                // 原因：在解析 Wasm 二进制文件内容到内存时，是先解析导入段中的函数到 m->functions，然后再解析函数段中的函数到 m->functions
+                if (fidx < m->import_func_count) {
+                    // TODO: 暂时忽略调用外部引入函数情况
+                } else {
+                    // 通过函数索引获取到函数
+                    Block *func = &m->functions[fidx];
+                    // 获取函数签名
+                    Type *ftype = func->type;
+
+                    // 如果调用栈溢出，则记录异常信息并返回 false 退出虚拟机执行
+                    if (m->csp >= CALLSTACK_SIZE) {
+                        sprintf(exception, "call stack exhausted");
+                        return false;
+                    }
+
+                    // 如果【实际函数类型】和【指令立即数中对应的函数类型】不相同，
+                    // 则记录异常信息并返回 false 退出虚拟机执行
+                    if (ftype->mask != m->types[tidx].mask) {
+                        sprintf(exception, "indirect call type mismatch (call type and function type differ)");
+                        return false;
+                    }
+
+                    // 调用函数前的设置，主要设置内容如下：
+                    // 1. 将当前函数关联的栈帧压入到调用栈顶成为当前栈帧，同时保存该栈帧被压入调用栈顶前的运行时状态，例如 sp fp ra 等
+                    // 2. 将当前函数的局部变量压入到操作数栈顶（默认初始值为 0）
+                    // 3. 将函数的字节码部分的【起始地址】设置为 pc（即下一条待执行指令的地址），即开始执行函数字节码中的指令流
+                    setup_call(m, fidx);
+
+                    // 由于 setup_call 函数中会将函数参数和局部变量压入操作数栈，
+                    // 所以可以校验【函数签名中声明的参数数量+函数局部变量数量】和【压入操作数栈的函数参数和局部变量总数】是否相等，
+                    // 如果不相等则记录异常信息并返回 false 退出虚拟机执行
+                    if (ftype->param_count + func->local_count != m->sp - m->fp + 1) {
+                        sprintf(exception, "indirect call type mismatch (param counts differ)");
+                        return false;
+                    }
+
+                    // 由于 setup_call 函数中会将函数参数和局部变量压入操作数栈，
+                    // 所以可以遍历【压入操作数栈的函数参数】的值，校验其类型和【函数签名中声明的参数类型】是否相等，
+                    // 如果不相等则记录异常信息并返回 false 退出虚拟机执行
+                    for (uint32_t n = 0; n < ftype->param_count; n++) {
+                        if (ftype->params[n] != m->stack[m->fp + n].value_type) {
+                            sprintf(exception, "indirect call type mismatch (param types differ)");
+                            return false;
+                        }
+                    }
+                }
+                continue;
+            }
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
                 return false;
