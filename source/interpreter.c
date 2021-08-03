@@ -503,6 +503,15 @@ bool interpret(Module *m) {
                 // 将对应的局部变量的值压入到栈顶
                 stack[++m->sp] = stack[m->fp + idx];
                 continue;
+            case LocalSet:
+                // 指令作用：将操作数栈顶的值弹出并保存到该函数的局部变量
+
+                // 该指令的立即数为局部变量的索引
+                idx = read_LEB_unsigned(bytes, &m->pc, 32);
+
+                // 弹出栈顶的值，将其保存到对应的局部变量中
+                stack[m->fp + idx] = stack[m->sp--];
+                continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
                 return false;
