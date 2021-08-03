@@ -462,6 +462,28 @@ bool interpret(Module *m) {
                 // 指令作用：丢弃操作数栈顶值
                 m->sp--;
                 continue;
+            case Select:
+                // 指令作用：从栈顶弹出 3 个操作数，根据最先弹出的操作数从其他两个操作数中选择一个压栈
+                // 如果为 true，则则将最后弹出的操作数压栈；如果为 false，则将中间弹出的操作数压栈。
+                // 注：最先弹出的操作数必须是 i32 类型，其他 2 个操作数数相同类型就可以
+
+                // 最先弹出的操作数必须是 i32 类型，否则报错
+                ASSERT(stack[m->sp].value_type == I32, "the type of operand stack top value need to be i32 when call select instruction \n")
+                // 先从操作数栈弹出一个值作为判断条件
+                cond = stack[m->sp--].value.uint32;
+
+                // 先将次栈顶设置为栈顶，
+                // 如果判断条件为 true，则将最后弹出的操作数压栈，
+                // 最后弹出的操作数也就是当前的次栈顶的值，已经将其设置为栈顶值，所以后面无需再做任何操作
+                m->sp--;
+
+                // 如果判断条件为 false，则将中间弹出的操作数压栈，
+                // 中间弹出的操作数压栈也就是 m->sp-- 之前的栈顶值，
+                // 所以用 m->sp-- 之前的栈顶值覆盖掉  m->sp-- 之后的栈顶值即可
+                if (!cond) {
+                    stack[m->sp] = stack[m->sp + 1];
+                }
+                continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
                 return false;
@@ -516,5 +538,5 @@ void run_init_expr(Module *m, uint8_t type, uint32_t *pc) {
     // 初始化表达式的字节码中的指令流执行完成后，操作数栈顶保存的就是指令流的执行结果，也就是初始化表达式计算的返回值
     // 由于初始化表达式计算一定会有返回值，且目前版本的 Wasm 规范规定控制块最多只能有一个返回值，所以初始化表达式计算必定会有一个返回值
     // 所以可以通过比对保存在操作数栈顶的值类型和参数 type 是否相同，来判断计算得到的返回值的类型是否正确
-    ASSERT(m->stack[m->sp].value_type == type, "init_expr type mismatch 0x%x != 0x%x", m->stack[m->sp].value_type, type)
+    ASSERT(m->stack[m->sp].value_type == type, "init_expr type mismatch 0x%x != 0x%x\n", m->stack[m->sp].value_type, type)
 }
