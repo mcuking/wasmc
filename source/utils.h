@@ -1,11 +1,19 @@
 #ifndef WASMC_UTILS_H
 #define WASMC_UTILS_H
 
-extern char exception[];
-
 #include "module.h"
 #include <stdbool.h>
 #include <stdlib.h>
+
+typedef uint64_t u64;
+typedef int64_t i64;
+typedef uint32_t u32;
+typedef int32_t i32;
+typedef double f64;
+typedef float f32;
+
+// 用于保存异常信息内容
+extern char exception[];
 
 // 报错
 #define FATAL(...)                                             \
@@ -95,5 +103,51 @@ double wa_fmax(double a, double b);
 
 // 64 位浮点型比较两数之间最小值
 double wa_fmin(double a, double b);
+
+// 非饱和截断
+#define OP_TRUNC(RES, A, TYPE, RMIN, RMAX)                   \
+    if (isnan(A)) {                                          \
+        sprintf(exception, "invalid conversion to integer"); \
+        return false;                                        \
+    }                                                        \
+    if ((A) <= (RMIN) || (A) >= (RMAX)) {                    \
+        sprintf(exception, "integer overflow");              \
+        return false;                                        \
+    }                                                        \
+    (RES) = (TYPE) (A);
+
+#define OP_I32_TRUNC_F32(RES, A) OP_TRUNC(RES, A, i32, -2147483904.0f, 2147483648.0f)
+#define OP_U32_TRUNC_F32(RES, A) OP_TRUNC(RES, A, u32, -1.0f, 4294967296.0f)
+#define OP_I32_TRUNC_F64(RES, A) OP_TRUNC(RES, A, i32, -2147483649.0, 2147483648.0)
+#define OP_U32_TRUNC_F64(RES, A) OP_TRUNC(RES, A, u32, -1.0, 4294967296.0)
+
+#define OP_I64_TRUNC_F32(RES, A) OP_TRUNC(RES, A, i64, -9223373136366403584.0f, 9223372036854775808.0f)
+#define OP_U64_TRUNC_F32(RES, A) OP_TRUNC(RES, A, u64, -1.0f, 18446744073709551616.0f)
+#define OP_I64_TRUNC_F64(RES, A) OP_TRUNC(RES, A, i64, -9223372036854777856.0, 9223372036854775808.0)
+#define OP_U64_TRUNC_F64(RES, A) OP_TRUNC(RES, A, u64, -1.0, 18446744073709551616.0)
+
+// 饱和截断
+// 注：和非饱和截断的区别在于，饱和截断会对异常情况做特殊处理。
+// 比如将 NaN 转换为 0。再比如如果超出了类型能表达的范围，让该变量等于一个最大值或者最小值。
+#define OP_TRUNC_SAT(RES, A, TYPE, RMIN, RMAX, IMIN, IMAX) \
+    if (isnan(A)) {                                        \
+        (RES) = 0;                                         \
+    } else if ((A) <= (RMIN)) {                            \
+        (RES) = IMIN;                                      \
+    } else if ((A) >= (RMAX)) {                            \
+        (RES) = IMAX;                                      \
+    } else {                                               \
+        (RES) = (TYPE)(A);                                 \
+    }
+
+#define OP_I32_TRUNC_SAT_F32(RES, A) OP_TRUNC_SAT(RES, A, i32, -2147483904.0f, 2147483648.0f, INT32_MIN, INT32_MAX)
+#define OP_U32_TRUNC_SAT_F32(RES, A) OP_TRUNC_SAT(RES, A, u32, -1.0f, 4294967296.0f, 0UL, UINT32_MAX)
+#define OP_I32_TRUNC_SAT_F64(RES, A) OP_TRUNC_SAT(RES, A, i32, -2147483649.0, 2147483648.0, INT32_MIN, INT32_MAX)
+#define OP_U32_TRUNC_SAT_F64(RES, A) OP_TRUNC_SAT(RES, A, u32, -1.0, 4294967296.0, 0UL, UINT32_MAX)
+
+#define OP_I64_TRUNC_SAT_F32(RES, A) OP_TRUNC_SAT(RES, A, i64, -9223373136366403584.0f, 9223372036854775808.0f, INT64_MIN, INT64_MAX)
+#define OP_U64_TRUNC_SAT_F32(RES, A) OP_TRUNC_SAT(RES, A, u64, -1.0f, 18446744073709551616.0f, 0ULL, UINT64_MAX)
+#define OP_I64_TRUNC_SAT_F64(RES, A) OP_TRUNC_SAT(RES, A, i64, -9223372036854777856.0, 9223372036854775808.0, INT64_MIN, INT64_MAX)
+#define OP_U64_TRUNC_SAT_F64(RES, A) OP_TRUNC_SAT(RES, A, u64, -1.0, 18446744073709551616.0, 0ULL, UINT64_MAX)
 
 #endif
