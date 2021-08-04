@@ -2,6 +2,7 @@
 #include "module.h"
 #include "opcode.h"
 #include "utils.h"
+#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -852,7 +853,7 @@ bool interpret(Module *m) {
              * 数值指令--比较指令（32 条）
              * */
             case I32Eq ... I32GeU:
-                // 指令作用：获取操作数栈的栈顶和次栈顶的值（32 位整数），根据具体指令对两个值进行比较，并用比较结果替换当前栈顶值
+                // 指令作用：获取操作数栈的栈顶和次栈顶的值（32 位整数），根据具体指令对两个值进行比较，并用比较结果覆盖当前操作数栈顶值
 
                 a = stack[m->sp - 1].value.uint32;
                 b = stack[m->sp].value.uint32;
@@ -896,7 +897,7 @@ bool interpret(Module *m) {
                 stack[m->sp].value.uint32 = c;
                 continue;
             case I64Eq ... I64GeU:
-                // 指令作用：获取操作数栈的栈顶和次栈顶的值（64 位整数），根据具体指令对两个值进行比较，并用比较结果替换当前栈顶值
+                // 指令作用：获取操作数栈的栈顶和次栈顶的值（64 位整数），根据具体指令对两个值进行比较，并用比较结果覆盖当前操作数栈顶值
 
                 d = stack[m->sp - 1].value.uint64;
                 e = stack[m->sp].value.uint64;
@@ -940,7 +941,7 @@ bool interpret(Module *m) {
                 stack[m->sp].value.uint32 = c;
                 continue;
             case F32Eq ... F32Ge:
-                // 指令作用：获取操作数栈的栈顶和次栈顶的值（32 位浮点数），根据具体指令对两个值进行比较，并用比较结果替换当前栈顶值
+                // 指令作用：获取操作数栈的栈顶和次栈顶的值（32 位浮点数），根据具体指令对两个值进行比较，并用比较结果覆盖当前操作数栈顶值
 
                 g = stack[m->sp - 1].value.f32;
                 h = stack[m->sp].value.f32;
@@ -972,7 +973,7 @@ bool interpret(Module *m) {
                 stack[m->sp].value.uint32 = c;
                 continue;
             case F64Eq ... F64Ge:
-                // 指令作用：获取操作数栈的栈顶和次栈顶的值（64 位浮点数），根据具体指令对两个值进行比较，并用比较结果替换当前栈顶值
+                // 指令作用：获取操作数栈的栈顶和次栈顶的值（64 位浮点数），根据具体指令对两个值进行比较，并用比较结果覆盖当前操作数栈顶值
 
                 j = stack[m->sp - 1].value.f64;
                 k = stack[m->sp].value.f64;
@@ -1002,6 +1003,385 @@ bool interpret(Module *m) {
                 // 注：比较的结果为布尔值，用 32 位整数表示
                 stack[m->sp].value_type = I32;
                 stack[m->sp].value.uint32 = c;
+                continue;
+
+            /*
+             * 数值指令--算术指令（64 条）
+             * */
+            case I32Clz ... I32PopCnt:
+                // 指令作用：获取操作数栈顶值（32 位整数），根据指令对其进行相应计算，并用计算结果覆盖当前操作数栈顶值
+
+                a = stack[m->sp].value.uint32;
+                switch (opcode) {
+                    case I32Clz:
+                        // 数值的二进制表示的位数
+                        c = a == 0 ? 32 : __builtin_clz(a);
+                        break;
+                    case I32Ctz:
+                        // 数值的二进制表示的末尾后面 0 的个数
+                        c = a == 0 ? 32 : __builtin_ctz(a);
+                        break;
+                    case I32PopCnt:
+                        // 数值的二进制表示中的 1 的个数
+                        c = __builtin_popcount(a);
+                        break;
+                    default:
+                        break;
+                }
+                
+                stack[m->sp].value.uint32 = c;
+                continue;
+            case I32Add ... I32Rotr:
+                // 指令作用：获取操作数栈的栈顶和次栈顶的值（32 位整数），根据具体指令对两个值进行计算，并用计算结果覆盖当前操作数栈顶值
+                
+                a = stack[m->sp - 1].value.uint32;
+                b = stack[m->sp].value.uint32;
+                m->sp -= 1;
+                
+                // 执行 I32DivS 和 I32RemU 之间的指令时，栈顶值 b 不能为 0，
+                // 如果为 0 则记录异常信息并返回 false 退出虚拟机执行
+                if (opcode >= I32DivS && opcode <= I32RemU && b == 0) {
+                    sprintf(exception, "integer divide by zero");
+                    return false;
+                }
+                
+                switch (opcode) {
+                    case I32Add:
+                        // 加法
+                        c = a + b;
+                        break;
+                    case I32Sub:
+                        // 减法
+                        c = a - b;
+                        break;
+                    case I32Mul:
+                        // 乘法
+                        c = a * b;
+                        break;
+                    case I32DivS:
+                        // 除法（有符号）
+                        if (a == 0x80000000 && b == -1) {
+                            sprintf(exception, "integer overflow");
+                            return false;
+                        }
+                        c = (int32_t) a / (int32_t) b;
+                        break;
+                    case I32DivU:
+                        // 除法（无符号）
+                        c = a / b;
+                        break;
+                    case I32RemS:
+                        // 取余（有符号）
+                        if (a == 0x80000000 && b == -1) {
+                            c = 0;
+                        } else {
+                            c = (int32_t) a % (int32_t) b;
+                        }
+                        break;
+                    case I32RemU:
+                        // 取余（无符号）
+                        c = a % b;
+                        break;
+                    case I32And:
+                        // 与
+                        c = a & b;
+                        break;
+                    case I32Or:
+                        // 或
+                        c = a | b;
+                        break;
+                    case I32Xor:
+                        // 异或
+                        c = a ^ b;
+                        break;
+                    case I32Shl:
+                        // 左移
+                        c = a << b;
+                        break;
+                    case I32ShrS:
+                        // 右移
+                        c = ((int32_t) a) >> b;
+                        break;
+                    case I32ShrU:
+                        // 右移
+                        c = a >> b;
+                        break;
+                    case I32Rotl:
+                        // 循环左移
+                        c = rotl32(a, b);
+                        break;
+                    case I32Rotr:
+                        // 循环右移
+                        c = rotr32(a, b);
+                        break;
+                    default:
+                        break;
+                }
+                
+                stack[m->sp].value.uint32 = c;
+                continue;
+            case I64Clz ... I64PopCnt:
+                // 指令作用：获取操作数栈顶值（64 位整数），根据指令对其进行相应计算，并用计算结果覆盖当前操作数栈顶值
+                
+                d = stack[m->sp].value.uint64;
+
+                switch (opcode) {
+                    case I64Clz:
+                        // 数值的二进制表示的位数
+                        f = d == 0 ? 64 : __builtin_clzll(d);
+                        break;
+                    case I64Ctz:
+                        // 数值的二进制表示的末尾后面 0 的个数
+                        f = d == 0 ? 64 : __builtin_ctzll(d);
+                        break;
+                    case I64PopCnt:
+                        // 数值的二进制表示中的 1 的个数
+                        f = __builtin_popcountll(d);
+                        break;
+                    default:
+                        break;
+                }
+
+                stack[m->sp].value.uint64 = f;
+                continue;
+            case I64Add ... I64Rotr:
+                // 指令作用：获取操作数栈的栈顶和次栈顶的值（64 位整数），根据具体指令对两个值进行计算，并用计算结果覆盖当前操作数栈顶值
+
+                d = stack[m->sp - 1].value.uint64;
+                e = stack[m->sp].value.uint64;
+                m->sp -= 1;
+
+                // 执行 I64DivS 和 I64RemU 之间的指令时，栈顶值 e 不能为 0，
+                // 如果为 0 则记录异常信息并返回 false 退出虚拟机执行
+                if (opcode >= I64DivS && opcode <= I64RemU && e == 0) {
+                    sprintf(exception, "integer divide by zero");
+                    return false;
+                }
+
+                switch (opcode) {
+                    case I64Add:
+                        // 加法
+                        f = d + e;
+                        break;
+                    case I64Sub:
+                        // 减法
+                        f = d - e;
+                        break;
+                    case I64Mul:
+                        // 乘法
+                        f = d * e;
+                        break;
+                    case I64DivS:
+                        // 除法（有符号）
+                        if (d == 0x80000000 && e == -1) {
+                            sprintf(exception, "integer overflow");
+                            return false;
+                        }
+                        f = (int64_t) d / (int64_t) e;
+                        break;
+                    case I64DivU:
+                        // 除法（无符号）
+                        f = d / e;
+                        break;
+                    case I64RemS:
+                        // 取余（有符号）
+                        if (d == 0x80000000 && e == -1) {
+                            f = 0;
+                        } else {
+                            f = (int64_t) d % (int64_t) e;
+                        }
+                        break;
+                    case I64RemU:
+                        // 取余（无符号）
+                        f = d % e;
+                        break;
+                    case I64And:
+                        // 与
+                        f = d & e;
+                        break;
+                    case I64Or:
+                        // 或
+                        f = d | e;
+                        break;
+                    case I64Xor:
+                        // 异或
+                        f = d ^ e;
+                        break;
+                    case I64Shl:
+                        // 左移
+                        f = d << e;
+                        break;
+                    case I64ShrS:
+                        // 右移
+                        f = ((int64_t) d) >> e;
+                        break;
+                    case I64ShrU:
+                        // 右移
+                        f = d >> e;
+                        break;
+                    case I64Rotl:
+                        // 循环左移
+                        f = rotl64(d, e);
+                        break;
+                    case I64Rotr:
+                        // 循环右移
+                        f = rotr64(d, e);
+                        break;
+                    default:
+                        break;
+                }
+
+                stack[m->sp].value.uint64 = f;
+                continue;
+            case F32Abs:
+                // 取绝对值（32 位浮点型）
+                stack[m->sp].value.f32 = fabsf(stack[m->sp].value.f32);
+                continue;
+            case F32Neg:
+                // 取反（32 位浮点型）
+                stack[m->sp].value.f32 = -stack[m->sp].value.f32;
+                continue;
+            case F32Ceil:
+                // 获取大于或等于操作数栈顶值的最小的整数值（32 位浮点型）
+                stack[m->sp].value.f32 = ceilf(stack[m->sp].value.f32);
+                continue;
+            case F32Floor:
+                // 获取小于或等于操作数栈顶值的最小的整数值（32 位浮点型）
+                stack[m->sp].value.f32 = floorf(stack[m->sp].value.f32);
+                continue;
+            case F32Trunc:
+                // 将小数部分截去，保留整数（32 位浮点型）
+                stack[m->sp].value.f32 = truncf(stack[m->sp].value.f32);
+                continue;
+            case F32Nearest:
+                // 获取最接近操作数栈顶值的整数，如果有 2 个数同样接近，则取偶数的整数（32 位浮点型）
+                stack[m->sp].value.f32 = rintf(stack[m->sp].value.f32);
+                continue;
+            case F32Sqrt:
+                // 取平方根（32 位浮点型）
+                stack[m->sp].value.f32 = sqrtf(stack[m->sp].value.f32);
+                continue;
+            case F32Add ... F32CopySign:
+                // 指令作用：获取操作数栈的栈顶和次栈顶的值（32 位浮点数），根据具体指令对两个值进行计算，并用计算结果覆盖当前操作数栈顶值
+
+                g = stack[m->sp - 1].value.f32;
+                h = stack[m->sp].value.f32;
+                m->sp -= 1;
+
+                switch (opcode) {
+                    case F32Add:
+                        // 加法
+                        i = g + h;
+                        break;
+                    case F32Sub:
+                        // 减法
+                        i = g - h;
+                        break;
+                    case F32Mul:
+                        // 乘法
+                        i = g * h;
+                        break;
+                    case F32Div:
+                        // 除法
+                        if (h == 0) {
+                            sprintf(exception, "integer divide by zero");
+                            return false;
+                        }
+                        i = g / h;
+                        break;
+                    case F32Min:
+                        // 取两者之间的最小值
+                        i = wa_fminf(g, h);
+                        break;
+                    case F32Max:
+                        // 取两者之间的最大值
+                        i = wa_fmaxf(g, h);
+                        break;
+                    case F32CopySign:
+                        // 获取带有第二个浮点数符号的第一个浮点数
+                        // 注：signbit 函数用于判断参数的符号位的正负，为负的时候返回 true，否则返回 false
+                        i = signbit(h) ? -fabsf(g) : fabsf(g);
+                        break;
+                    default:
+                        break;
+                }
+
+                stack[m->sp].value.f32 = i;
+                continue;
+            case F64Abs:
+                // 取绝对值（64 位浮点型）
+                stack[m->sp].value.f32 = (float) fabs(stack[m->sp].value.f64);
+                continue;
+            case F64Neg:
+                // 取反（64 位浮点型）
+                stack[m->sp].value.f64 = -stack[m->sp].value.f64;
+                continue;
+            case F64Ceil:
+                // 获取大于或等于操作数栈顶值的最小的整数值（64 位浮点型）
+                stack[m->sp].value.f64 = ceil(stack[m->sp].value.f64);
+                continue;
+            case F64Floor:
+                // 获取小于或等于操作数栈顶值的最小的整数值（64 位浮点型）
+                stack[m->sp].value.f64 = floor(stack[m->sp].value.f64);
+                continue;
+            case F64Trunc:
+                // 将小数部分截去，保留整数（64 位浮点型）
+                stack[m->sp].value.f64 = trunc(stack[m->sp].value.f64);
+                continue;
+            case F64Nearest:
+                // 获取最接近操作数栈顶值的整数，如果有 2 个数同样接近，则取偶数的整数（64 位浮点型）
+                stack[m->sp].value.f64 = rint(stack[m->sp].value.f64);
+                continue;
+            case F64Sqrt:
+                // 取平方根（64 位浮点型）
+                stack[m->sp].value.f64 = sqrt(stack[m->sp].value.f64);
+                continue;
+            case F64Add ... F64CopySign:
+                // 指令作用：获取操作数栈的栈顶和次栈顶的值（64 位浮点数），根据具体指令对两个值进行计算，并用计算结果覆盖当前操作数栈顶值
+
+                j = stack[m->sp - 1].value.f64;
+                k = stack[m->sp].value.f64;
+                m->sp -= 1;
+
+                switch (opcode) {
+                    case F64Add:
+                        // 加法
+                        l = j + k;
+                        break;
+                    case F64Sub:
+                        // 减法
+                        l = j - k;
+                        break;
+                    case F64Mul:
+                        // 乘法
+                        l = j * k;
+                        break;
+                    case F64Div:
+                        // 除法
+                        if (k == 0) {
+                            sprintf(exception, "integer divide by zero");
+                            return false;
+                        }
+                        l = j / k;
+                        break;
+                    case F64Min:
+                        // 取两者之间的最小值
+                        l = wa_fmin(j, k);
+                        break;
+                    case F64Max:
+                        // 取两者之间的最大值
+                        l = wa_fmax(j, k);
+                        break;
+                    case F64CopySign:
+                        // 获取带有第二个浮点数符号的第一个浮点数
+                        // 注：signbit 函数用于判断参数的符号位的正负，为负的时候返回 true，否则返回 false
+                        l = signbit(k) ? -fabs(j) : fabs(j);
+                        break;
+                    default:
+                        break;
+                }
+
+                stack[m->sp].value.f64 = l;
                 continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
