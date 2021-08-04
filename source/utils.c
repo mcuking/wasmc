@@ -1,6 +1,8 @@
 #include "utils.h"
 #include "module.h"
 #include <dlfcn.h>
+#include <limits.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -233,3 +235,70 @@ void sext_32_64(uint64_t *val) {
     }
 }
 
+// 32 位整型循环左移
+uint32_t rotl32(uint32_t n, unsigned int c) {
+    const unsigned int mask = (CHAR_BIT * sizeof(n) - 1);
+    c = c % 32;
+    c &= mask;
+    return (n << c) | (n >> ((-c) & mask));
+}
+
+// 32 位整型循环右移
+uint32_t rotr32(uint32_t n, unsigned int c) {
+    const unsigned int mask = (CHAR_BIT * sizeof(n) - 1);
+    c = c % 32;
+    c &= mask;
+    return (n >> c) | (n << ((-c) & mask));
+}
+
+// 64 位整型循环左移
+uint64_t rotl64(uint64_t n, unsigned int c) {
+    const unsigned int mask = (CHAR_BIT * sizeof(n) - 1);
+    c = c % 64;
+    c &= mask;
+    return (n << c) | (n >> ((-c) & mask));
+}
+
+// 64 位整型循环右移
+uint64_t rotr64(uint64_t n, unsigned int c) {
+    const unsigned int mask = (CHAR_BIT * sizeof(n) - 1);
+    c = c % 64;
+    c &= mask;
+    return (n >> c) | (n << ((-c) & mask));
+}
+
+// 32 位浮点型比较两数之间最大值
+float wa_fmaxf(float a, float b) {
+    float c = fmaxf(a, b);
+    if (c == 0 && a == b) {
+        return signbit(a) ? b : a;
+    }
+    return c;
+}
+
+// 32 位浮点型比较两数之间最小值
+float wa_fminf(float a, float b) {
+    float c = fminf(a, b);
+    if (c == 0 && a == b) {
+        return signbit(a) ? a : b;
+    }
+    return c;
+}
+
+// 64 位浮点型比较两数之间最大值
+double wa_fmax(double a, double b) {
+    double c = fmax(a, b);
+    if (c == 0 && a == b) {
+        return signbit(a) ? b : a;
+    }
+    return c;
+}
+
+// 64 位浮点型比较两数之间最小值
+double wa_fmin(double a, double b) {
+    double c = fmin(a, b);
+    if (c == 0 && a == b) {
+        return signbit(a) ? a : b;
+    }
+    return c;
+}

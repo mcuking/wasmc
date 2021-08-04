@@ -72,4 +72,28 @@ void sext_16_64(uint64_t *val);
 
 void sext_32_64(uint64_t *val);
 
+// 32 位整型循环左移
+uint32_t rotl32(uint32_t n, unsigned int c);
+
+// 32 位整型循环右移
+uint32_t rotr32(uint32_t n, unsigned int c);
+
+// 64 位整型循环左移
+uint64_t rotl64(uint64_t n, unsigned int c);
+
+// 64 位整型循环右移
+uint64_t rotr64(uint64_t n, unsigned int c);
+
+// 32 位浮点型比较两数之间最大值
+float wa_fmaxf(float a, float b);
+
+// 32 位浮点型比较两数之间最小值
+float wa_fminf(float a, float b);
+
+// 64 位浮点型比较两数之间最大值
+double wa_fmax(double a, double b);
+
+// 64 位浮点型比较两数之间最小值
+double wa_fmin(double a, double b);
+
 #endif
