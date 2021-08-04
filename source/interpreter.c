@@ -145,6 +145,10 @@ bool interpret(Module *m) {
     uint8_t *maddr;                 // 实际内存地址指针
     uint32_t addr;                  // 用于计算相对内存地址
     uint32_t offset;                // 内存偏移量
+    uint32_t a, b, c;               // 用于 I32 数值计算
+    uint64_t d, e, f;               // 用于 I64 数值计算
+    float g, h, i;                  // 用于 F32 数值计算
+    double j, k, l;                 // 用于 F64 数值计算
 
     while (m->pc < m->byte_count) {
         opcode = bytes[m->pc];// 读取指令中的操作码
@@ -790,16 +794,19 @@ bool interpret(Module *m) {
              * */
             case I32Const:
                 // 指令作用：将指令的立即数以 i32 类型压入操作数栈顶
+
                 stack[++m->sp].value_type = I32;
                 stack[m->sp].value.uint32 = read_LEB_signed(bytes, &m->pc, 32);
                 continue;
             case I64Const:
                 // 指令作用：将指令的立即数以 i64 类型压入操作数栈顶
+
                 stack[++m->sp].value_type = I64;
-                stack[m->sp].value.int64 = (int64_t)read_LEB_signed(bytes, &m->pc, 64);
+                stack[m->sp].value.int64 = (int64_t) read_LEB_signed(bytes, &m->pc, 64);
                 continue;
             case F32Const:
                 // 指令作用：将指令的立即数以 f32 类型压入操作数栈顶
+
                 stack[++m->sp].value_type = F32;
                 // LEB128 编码仅针对整数，而该指令的立即数为浮点数，并没有被编码，而是直接写入到 Wasm 二进制文件中的
                 memcpy(&stack[m->sp].value.uint32, bytes + m->pc, 4);
@@ -809,6 +816,7 @@ bool interpret(Module *m) {
                 continue;
             case F64Const:
                 // 指令作用：将指令的立即数以 f64 类型压入操作数栈顶
+
                 stack[++m->sp].value_type = F64;
                 // LEB128 编码仅针对整数，而该指令的立即数为浮点数，并没有被编码，而是直接写入到 Wasm 二进制文件中的
                 memcpy(&stack[m->sp].value.uint64, bytes + m->pc, 8);
@@ -838,6 +846,162 @@ bool interpret(Module *m) {
                 // 然后用判断结果（i32 类型的布尔值）覆盖当前操作数栈顶值
                 stack[m->sp].value_type = I32;
                 stack[m->sp].value.uint32 = stack[m->sp].value.uint64 == 0;
+                continue;
+
+            /*
+             * 数值指令--比较指令（32 条）
+             * */
+            case I32Eq ... I32GeU:
+                // 指令作用：获取操作数栈的栈顶和次栈顶的值（32 位整数），根据具体指令对两个值进行比较，并用比较结果替换当前栈顶值
+
+                a = stack[m->sp - 1].value.uint32;
+                b = stack[m->sp].value.uint32;
+                m->sp -= 1;
+                switch (opcode) {
+                    case I32Eq:
+                        c = a == b;
+                        break;
+                    case I32Ne:
+                        c = a != b;
+                        break;
+                    case I32LtS:
+                        c = (uint32_t) a < (uint32_t) b;
+                        break;
+                    case I32LtU:
+                        c = a < b;
+                        break;
+                    case I32GtS:
+                        c = (uint32_t) a > (uint32_t) b;
+                        break;
+                    case I32GtU:
+                        c = a > b;
+                        break;
+                    case I32LeS:
+                        c = (uint32_t) a <= (uint32_t) b;
+                        break;
+                    case I32LeU:
+                        c = a <= b;
+                        break;
+                    case I32GeS:
+                        c = (uint32_t) a >= (uint32_t) b;
+                        break;
+                    case I32GeU:
+                        c = a >= b;
+                        break;
+                    default:
+                        break;
+                }
+                // 注：比较的结果为布尔值，用 32 位整数表示
+                stack[m->sp].value_type = I32;
+                stack[m->sp].value.uint32 = c;
+                continue;
+            case I64Eq ... I64GeU:
+                // 指令作用：获取操作数栈的栈顶和次栈顶的值（64 位整数），根据具体指令对两个值进行比较，并用比较结果替换当前栈顶值
+
+                d = stack[m->sp - 1].value.uint64;
+                e = stack[m->sp].value.uint64;
+                m->sp -= 1;
+                switch (opcode) {
+                    case I64Eq:
+                        c = d == e;
+                        break;
+                    case I64Ne:
+                        c = d != e;
+                        break;
+                    case I64LtS:
+                        c = (uint64_t) d < (uint64_t) e;
+                        break;
+                    case I64LtU:
+                        c = d < e;
+                        break;
+                    case I64GtS:
+                        c = (uint64_t) d > (uint64_t) e;
+                        break;
+                    case I64GtU:
+                        c = d > e;
+                        break;
+                    case I64LeS:
+                        c = (uint64_t) d <= (uint64_t) e;
+                        break;
+                    case I64LeU:
+                        c = d <= e;
+                        break;
+                    case I64GeS:
+                        c = (uint64_t) d >= (uint64_t) e;
+                        break;
+                    case I64GeU:
+                        c = d >= e;
+                        break;
+                    default:
+                        break;
+                }
+                // 注：比较的结果为布尔值，用 32 位整数表示
+                stack[m->sp].value_type = I32;
+                stack[m->sp].value.uint32 = c;
+                continue;
+            case F32Eq ... F32Ge:
+                // 指令作用：获取操作数栈的栈顶和次栈顶的值（32 位浮点数），根据具体指令对两个值进行比较，并用比较结果替换当前栈顶值
+
+                g = stack[m->sp - 1].value.f32;
+                h = stack[m->sp].value.f32;
+                m->sp -= 1;
+                switch (opcode) {
+                    case F32Eq:
+                        c = g == h;
+                        break;
+                    case F32Ne:
+                        c = g != h;
+                        break;
+                    case F32Lt:
+                        c = g < h;
+                        break;
+                    case F32Gt:
+                        c = g > h;
+                        break;
+                    case F32Le:
+                        c = g <= h;
+                        break;
+                    case F32Ge:
+                        c = g >= h;
+                        break;
+                    default:
+                        break;
+                }
+                // 注：比较的结果为布尔值，用 32 位整数表示
+                stack[m->sp].value_type = I32;
+                stack[m->sp].value.uint32 = c;
+                continue;
+            case F64Eq ... F64Ge:
+                // 指令作用：获取操作数栈的栈顶和次栈顶的值（64 位浮点数），根据具体指令对两个值进行比较，并用比较结果替换当前栈顶值
+
+                j = stack[m->sp - 1].value.f64;
+                k = stack[m->sp].value.f64;
+                m->sp -= 1;
+                switch (opcode) {
+                    case F64Eq:
+                        c = j == k;
+                        break;
+                    case F64Ne:
+                        c = j != k;
+                        break;
+                    case F64Lt:
+                        c = j < k;
+                        break;
+                    case F64Gt:
+                        c = j > k;
+                        break;
+                    case F64Le:
+                        c = j <= k;
+                        break;
+                    case F64Ge:
+                        c = j >= k;
+                        break;
+                    default:
+                        break;
+                }
+                // 注：比较的结果为布尔值，用 32 位整数表示
+                stack[m->sp].value_type = I32;
+                stack[m->sp].value.uint32 = c;
                 continue;
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
