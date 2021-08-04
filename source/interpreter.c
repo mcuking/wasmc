@@ -1028,23 +1028,23 @@ bool interpret(Module *m) {
                     default:
                         break;
                 }
-                
+
                 stack[m->sp].value.uint32 = c;
                 continue;
             case I32Add ... I32Rotr:
                 // 指令作用：获取操作数栈的栈顶和次栈顶的值（32 位整数），根据具体指令对两个值进行计算，并用计算结果覆盖当前操作数栈顶值
-                
+
                 a = stack[m->sp - 1].value.uint32;
                 b = stack[m->sp].value.uint32;
                 m->sp -= 1;
-                
+
                 // 执行 I32DivS 和 I32RemU 之间的指令时，栈顶值 b 不能为 0，
                 // 如果为 0 则记录异常信息并返回 false 退出虚拟机执行
                 if (opcode >= I32DivS && opcode <= I32RemU && b == 0) {
                     sprintf(exception, "integer divide by zero");
                     return false;
                 }
-                
+
                 switch (opcode) {
                     case I32Add:
                         // 加法
@@ -1117,12 +1117,12 @@ bool interpret(Module *m) {
                     default:
                         break;
                 }
-                
+
                 stack[m->sp].value.uint32 = c;
                 continue;
             case I64Clz ... I64PopCnt:
                 // 指令作用：获取操作数栈顶值（64 位整数），根据指令对其进行相应计算，并用计算结果覆盖当前操作数栈顶值
-                
+
                 d = stack[m->sp].value.uint64;
 
                 switch (opcode) {
@@ -1383,6 +1383,218 @@ bool interpret(Module *m) {
 
                 stack[m->sp].value.f64 = l;
                 continue;
+
+            /*
+             * 数值指令--类型转换指令（31 条）
+             *
+             * 注：类型转换指令的助记符是 t'.conv_t，
+             * 其中操作数在类型转换之前的类型是 t，之后的类型是 t'，转换操作是 conv
+             * */
+            case I32WrapI64:
+                // 指令作用：将 64 位整数截断为 32 位整数
+                stack[m->sp].value.uint64 &= 0x00000000ffffffff;
+                stack[m->sp].value_type = I32;
+                continue;
+            case I32TruncF32S:
+                // 指令作用：将 32 位浮点数截断为 32 有符号位整数（截掉小数部分）
+                OP_I32_TRUNC_F32(stack[m->sp].value.int32, stack[m->sp].value.f32)
+                stack[m->sp].value_type = I32;
+                continue;
+            case I32TruncF32U:
+                // 指令作用：将 32 位浮点数截断为 32 位无符号整数（截掉小数部分）
+                OP_U32_TRUNC_F32(stack[m->sp].value.uint32, stack[m->sp].value.f32)
+                stack[m->sp].value_type = I32;
+                continue;
+            case I32TruncF64S:
+                // 指令作用：将 64 位浮点数截断为 32 位有符号整数（截掉小数部分）
+                OP_I32_TRUNC_F64(stack[m->sp].value.int32, stack[m->sp].value.f64)
+                stack[m->sp].value_type = I32;
+                continue;
+            case I32TruncF64U:
+                // 指令作用：将 64 位浮点数截断为 32 位无符号整数（截掉小数部分）
+                OP_U32_TRUNC_F64(stack[m->sp].value.uint32, stack[m->sp].value.f64)
+                stack[m->sp].value_type = I32;
+                continue;
+            case I64ExtendI32S:
+                // 指令作用：将 32 位有符号整数位数拉升为 64 位整数
+                stack[m->sp].value.uint64 = stack[m->sp].value.uint32;
+                sext_32_64(&stack[m->sp].value.uint64);
+                stack[m->sp].value_type = I64;
+                continue;
+            case I64ExtendI32U:
+                // 指令作用：将 32 位无符号整数位数拉升为 64 位整数
+                stack[m->sp].value.uint64 = stack[m->sp].value.uint32;
+                stack[m->sp].value_type = I64;
+                continue;
+            case I64TruncF32S:
+                // 指令作用：将 32 位浮点数截断为 64 位有符号整数（截掉小数部分）
+                OP_I64_TRUNC_F32(stack[m->sp].value.int64, stack[m->sp].value.f32)
+                stack[m->sp].value_type = I64;
+                continue;
+            case I64TruncF32U:
+                // 指令作用：将 32 位浮点数截断为 64 位无符号整数（截掉小数部分）
+                OP_U64_TRUNC_F32(stack[m->sp].value.uint64, stack[m->sp].value.f32)
+                stack[m->sp].value_type = I64;
+                continue;
+            case I64TruncF64S:
+                // 指令作用：将 64 位浮点数截断为 64 位有符号整数（截掉小数部分）
+                OP_I64_TRUNC_F64(stack[m->sp].value.int64, stack[m->sp].value.f64)
+                stack[m->sp].value_type = I64;
+                continue;
+            case I64TruncF64U:
+                // 指令作用：将 64 位无符号浮点数截断为 64 位无符号整数（截掉小数部分）
+                OP_U64_TRUNC_F64(stack[m->sp].value.uint64, stack[m->sp].value.f64)
+                stack[m->sp].value_type = I64;
+                continue;
+            case F32ConvertI32S:
+                // 指令作用：将 32 位有符号整数转化为 32 位浮点数
+                stack[m->sp].value.f32 = (float) stack[m->sp].value.int32;
+                stack[m->sp].value_type = F32;
+                continue;
+            case F32ConvertI32U:
+                // 指令作用：将 32 位无符号整数转化为 32 位浮点数
+                stack[m->sp].value.f32 = (float) stack[m->sp].value.uint32;
+                stack[m->sp].value_type = F32;
+                continue;
+            case F32ConvertI64S:
+                // 指令作用：将 64 位有符号整数转化为 32 位浮点数
+                stack[m->sp].value.f32 = (float) stack[m->sp].value.int64;
+                stack[m->sp].value_type = F32;
+                continue;
+            case F32ConvertI64U:
+                // 指令作用：将 64 位无符号整数转化为 32 位浮点数
+                stack[m->sp].value.f32 = (float) stack[m->sp].value.uint64;
+                stack[m->sp].value_type = F32;
+                continue;
+            case F32DemoteF64:
+                // 指令作用：将 64 位浮点数精度降低到 32 位
+                stack[m->sp].value.f32 = (float) stack[m->sp].value.f64;
+                stack[m->sp].value_type = F32;
+                continue;
+            case F64ConvertI32S:
+                // 指令作用：将 32 位有符号整数转化为 64 位浮点数
+                stack[m->sp].value.f64 = stack[m->sp].value.int32;
+                stack[m->sp].value_type = F64;
+                continue;
+            case F64ConvertI32U:
+                // 指令作用：将 32 位无符号整数转化为 64 位浮点数
+                stack[m->sp].value.f64 = stack[m->sp].value.uint32;
+                stack[m->sp].value_type = F64;
+                continue;
+            case F64ConvertI64S:
+                // 指令作用：将 64 位有符号整数转化为 64 位浮点数
+                stack[m->sp].value.f64 = (double) stack[m->sp].value.int64;
+                stack[m->sp].value_type = F64;
+                continue;
+            case F64ConvertI64U:
+                // 指令作用：将 64 位无符号整数转化为 64 位浮点数
+                stack[m->sp].value.f64 = (double) stack[m->sp].value.uint64;
+                stack[m->sp].value_type = F64;
+                continue;
+            case F64PromoteF32:
+                // 指令作用：将 32 位浮点数精度提升到 64 位
+                stack[m->sp].value.f64 = stack[m->sp].value.f32;
+                stack[m->sp].value_type = F64;
+                continue;
+            case I32ReinterpretF32:
+                // 指令作用：将 64 位浮点数重新解释为 32 位整数类型，但不改变比特位
+                stack[m->sp].value_type = I32;
+                continue;
+            case I64ReinterpretF64:
+                // 指令作用：将 64 位浮点数重新解释为 64 位整数类型，但不改变比特位
+                stack[m->sp].value_type = I64;
+                continue;
+            case F32ReinterpretI32:
+                // 指令作用：将 32 位整数重新解释为 32 位浮点数类型，但不改变比特位
+                stack[m->sp].value_type = F32;
+                continue;
+            case F64ReinterpretI64:
+                // 指令作用：将 64 位整数重新解释为 64 位浮点数类型，但不改变比特位
+                stack[m->sp].value_type = F64;
+                continue;
+            case I32Extend8S:
+                // 指令作用：将 8 位有符号整数位数拉升为 32 位整数
+                stack[m->sp].value.int32 = ((int32_t) (int8_t) stack[m->sp].value.int32);
+                continue;
+            case I32Extend16S:
+                // 指令作用：将 16 位有符号整数位数拉升为 32 位整数
+                stack[m->sp].value.int32 = ((int32_t) (int16_t) stack[m->sp].value.int32);
+                continue;
+            case I64Extend8S:
+                // 指令作用：将 8 位有符号整数位数拉升为 64 位整数
+                stack[m->sp].value.int64 = ((int64_t) (int8_t) stack[m->sp].value.int64);
+                continue;
+            case I64Extend16S:
+                // 指令作用：将 16 位有符号整数位数拉升为 64 位整数
+                stack[m->sp].value.int64 = ((int64_t) (int16_t) stack[m->sp].value.int64);
+                continue;
+            case I64Extend32S:
+                // 指令作用：将 32 位有符号整数位数拉升为 64 位整数
+                stack[m->sp].value.int64 = ((int64_t) (int32_t) stack[m->sp].value.int64);
+                continue;
+            case TruncSat: {
+                // 饱和截断指令
+                // Wasm 支持的 4 种基本类型都是固定长度：i32 和 f32 类型占 4 字节，i64 和 f64 类型占 8 字节
+                // 定长的数据类型只能表达有限的数值，因此对 2 个某种类型的数进行计算，其结果可能会超出该类型的表达范围，也就是溢出：包括上溢和下溢
+                // 针对溢出有 3 种处理方式：
+                // 1. 环绕（Wrapping），整数运算通常采用这种方式。以 u32 类型为例，0xfffffffd 和 0x04 相加导致溢出，结果为 0x01
+                // 2. 饱和（Saturation），浮点数运算通常采用这种方式，超出范围的值会被表示为正或负“无穷”（+Inf / -Inf）
+                // 3. 异常，例如整数除 0 通常会产生异常
+                // 截断指令需要将浮点数截断为整数，所以可能会产生溢出，或者无法转换（比如 NaN）情况
+
+                // 新增的 8 条饱和截断指令和上面的 8 条非饱和截断指令是一一对应的，只是对于异常情况做了特殊处理，
+                // 比如将 NaN 转换为 0。再比如如果超出了类型能表达的范围，让该变量等于一个最大值或者最小值。
+                // 这 8 条指令是通过一条特殊的操作码前缀 0xFC 引入的，操作码前缀 0xFC 未来可能会用来增加其他指令。
+                // 为了保持统一，我们仍将 0xFC 作为一个普通操作码，将跟在它后面的字节当作它的立即数，这样就可以认为只有一条饱和截断指令
+
+                // 在读取一个字节，用来区分不同类型的浮点数和整数之间的转换
+                uint8_t type = read_LEB_unsigned(bytes, &m->pc, 8);
+                switch (type) {
+                    case 0x00:
+                        // 指令作用：将 32 位浮点数饱和截断为 32 有符号位整数（截掉小数部分）
+                        OP_I32_TRUNC_SAT_F32(stack[m->sp].value.int32, stack[m->sp].value.f32)
+                        stack[m->sp].value_type = I32;
+                        break;
+                    case 0x01:
+                        // 指令作用：将 32 位浮点数截断为 32 位无符号整数（截掉小数部分）
+                        OP_U32_TRUNC_SAT_F32(stack[m->sp].value.uint32, stack[m->sp].value.f32)
+                        stack[m->sp].value_type = I32;
+                        break;
+                    case 0x02:
+                        // 指令作用：将 64 位浮点数截断为 32 位有符号整数（截掉小数部分）
+                        OP_I32_TRUNC_SAT_F64(stack[m->sp].value.int32, stack[m->sp].value.f64)
+                        stack[m->sp].value_type = I32;
+                        break;
+                    case 0x03:
+                        // 指令作用：将 64 位浮点数截断为 32 位无符号整数（截掉小数部分）
+                        OP_U32_TRUNC_SAT_F64(stack[m->sp].value.uint32, stack[m->sp].value.f64)
+                        stack[m->sp].value_type = I32;
+                        break;
+                    case 0x04:
+                        // 指令作用：将 32 位浮点数截断为 64 位有符号整数（截掉小数部分）
+                        OP_I64_TRUNC_SAT_F32(stack[m->sp].value.int64, stack[m->sp].value.f32)
+                        stack[m->sp].value_type = I64;
+                        break;
+                    case 0x05:
+                        // 指令作用：将 32 位浮点数截断为 64 位无符号整数（截掉小数部分）
+                        OP_U64_TRUNC_SAT_F32(stack[m->sp].value.uint64, stack[m->sp].value.f32)
+                        stack[m->sp].value_type = I64;
+                        break;
+                    case 0x06:
+                        // 指令作用：将 64 位浮点数截断为 64 位有符号整数（截掉小数部分）
+                        OP_I64_TRUNC_SAT_F64(stack[m->sp].value.int64, stack[m->sp].value.f64)
+                        stack[m->sp].value_type = I64;
+                        break;
+                    case 0x07:
+                        // 指令作用：将 64 位无符号浮点数截断为 64 位无符号整数（截掉小数部分）
+                        OP_U64_TRUNC_SAT_F64(stack[m->sp].value.uint64, stack[m->sp].value.f64)
+                        stack[m->sp].value_type = I64;
+                        break;
+                    default:
+                        break;
+                }
+                continue;
+            }
             default:
                 // 无法识别的非法操作码（不在 Wasm 规定的字节码）
                 return false;

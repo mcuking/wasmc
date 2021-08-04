@@ -185,7 +185,7 @@ Type block_types[5] = {
 // 注：目前多返回值提案还没有进入 Wasm 标准，根据当前版本的 Wasm 标准，控制块不能有参数，且最多只能有一个返回值
 Type *get_block_type(uint8_t value_type) {
     switch (value_type) {
-        case 0x40:
+        case BLOCK:
             return &block_types[0];
         case I32:
             return &block_types[1];
