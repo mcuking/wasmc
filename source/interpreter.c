@@ -478,7 +478,7 @@ bool interpret(Module *m) {
                 // 注：最先弹出的操作数必须是 i32 类型，其他 2 个操作数数相同类型就可以
 
                 // 最先弹出的操作数必须是 i32 类型，否则报错
-                ASSERT(stack[m->sp].value_type == I32, "the type of operand stack top value need to be i32 when call select instruction \n")
+                ASSERT(stack[m->sp].value_type == I32, "The type of operand stack top value need to be i32 when call select instruction \n")
                 // 先从操作数栈弹出一个值作为判断条件
                 cond = stack[m->sp--].value.uint32;
 
@@ -1649,5 +1649,5 @@ void run_init_expr(Module *m, uint8_t type, uint32_t *pc) {
     // 初始化表达式的字节码中的指令流执行完成后，操作数栈顶保存的就是指令流的执行结果，也就是初始化表达式计算的返回值
     // 由于初始化表达式计算一定会有返回值，且目前版本的 Wasm 规范规定控制块最多只能有一个返回值，所以初始化表达式计算必定会有一个返回值
     // 所以可以通过比对保存在操作数栈顶的值类型和参数 type 是否相同，来判断计算得到的返回值的类型是否正确
-    ASSERT(m->stack[m->sp].value_type == type, "init_expr type mismatch 0x%x != 0x%x\n", m->stack[m->sp].value_type, type)
+    ASSERT(m->stack[m->sp].value_type == type, "Init_expr type mismatch 0x%x != 0x%x\n", m->stack[m->sp].value_type, type)
 }

@@ -12,3 +12,5 @@ set(SOURCES
         ${SOURCES_ROOT}/source/interpreter.c)
 
 add_executable(wasmc ${SOURCES})
+
+target_link_libraries(wasmc readline)

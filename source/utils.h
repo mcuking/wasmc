@@ -33,6 +33,8 @@ extern char exception[];
         }                                                                   \
     }
 
+#define ERROR(...) fprintf(stderr, __VA_ARGS__);
+
 // 解码针对无符号整数的 LEB128 编码
 uint64_t read_LEB_unsigned(const uint8_t *bytes, uint32_t *pos, uint32_t maxbits);
 
@@ -149,5 +151,21 @@ double wa_fmin(double a, double b);
 #define OP_U64_TRUNC_SAT_F32(RES, A) OP_TRUNC_SAT(RES, A, u64, -1.0f, 18446744073709551616.0f, 0ULL, UINT64_MAX)
 #define OP_I64_TRUNC_SAT_F64(RES, A) OP_TRUNC_SAT(RES, A, i64, -9223372036854777856.0, 9223372036854775808.0, INT64_MIN, INT64_MAX)
 #define OP_U64_TRUNC_SAT_F64(RES, A) OP_TRUNC_SAT(RES, A, u64, -1.0, 18446744073709551616.0, 0ULL, UINT64_MAX)
+
+// 将 StackValue 类型数值用字符串形式展示，展示形式 "<value>:<value_type>"
+char *value_repr(StackValue *v);
+
+// 通过名称从 Wasm 模块中查找同名的导出项
+void *get_export(Module *m, char *name);
+
+// 打开文件并将文件映射进内存
+uint8_t *mmap_file(char *path, int *len);
+
+// 将字符串 str 按照空格拆分成多个参数
+// 其中 argc 被赋值为拆分字符串 str 得到的参数数量
+char **split_argv(char *str, int *argc);
+
+// 解析函数参数，并将参数压入到操作数栈
+void parse_args(Module *m, Type *type, int argc, char **argv);
 
 #endif

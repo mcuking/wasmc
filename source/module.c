@@ -156,7 +156,7 @@ void find_blocks(Module *m) {
                     break;
                 case Else_:
                     // 如果当前控制块中存在操作码为 Else_ 的指令，则当前控制块的块类型必须为 If
-                    ASSERT(blockstack[top]->block_type == If, "else not matched with if\n")
+                    ASSERT(blockstack[top]->block_type == If, "Else not matched with if\n")
 
                     // 将 Else_ 指令的下一条指令地址，设置为该控制块的 else_addr，即 else 分支对应的字节码的首地址，
                     // 便于后续虚拟机在执行指令时，根据条件跳转到 else 分支对应的字节码继续执行指令
@@ -169,7 +169,7 @@ void find_blocks(Module *m) {
                     }
 
                     // 如果执行了 End_ 指令，说明至少收集了一个控制块的相关信息，所以 top 不可能是初始值 -1，至少大于等于 0
-                    ASSERT(top >= 0, "blockstack underflow\n")
+                    ASSERT(top >= 0, "Blockstack underflow\n")
 
                     // 从控制块栈栈弹出该控制块
                     block = blockstack[top--];

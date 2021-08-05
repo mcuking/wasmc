@@ -1,12 +1,16 @@
 #include "utils.h"
 #include "module.h"
+#include <ctype.h>
 #include <dlfcn.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 
 // 全局的异常信息，用于收集运行时（即虚拟机执行指令过程）中的异常信息
 char exception[4096];
@@ -196,7 +200,7 @@ Type *get_block_type(uint8_t value_type) {
         case F64:
             return &block_types[4];
         default:
-            FATAL("invalid block_type value_type: %d\n", value_type)
+            FATAL("Invalid block_type value_type: %d\n", value_type)
     }
 }
 
@@ -301,4 +305,120 @@ double wa_fmin(double a, double b) {
         return signbit(a) ? a : b;
     }
     return c;
+}
+
+// 将 StackValue 类型数值用字符串形式展示，展示形式 "<value>:<value_type>"
+char value_str[256];
+char *value_repr(StackValue *v) {
+    switch (v->value_type) {
+        case I32:
+            snprintf(value_str, 255, "0x%x:i32", v->value.uint32);
+            break;
+        case I64:
+            snprintf(value_str, 255, "0x%llx:i64", v->value.uint64);
+            break;
+        case F32:
+            snprintf(value_str, 255, "%.7g:f32", v->value.f32);
+            break;
+        case F64:
+            snprintf(value_str, 255, "%.7g:f64", v->value.f64);
+            break;
+    }
+    return value_str;
+}
+
+// 通过名称从 Wasm 模块中查找同名的导出项
+void *get_export(Module *m, char *name) {
+    for (uint32_t e = 0; e < m->export_count; e++) {
+        char *export_name = m->exports[e].export_name;
+        if (!export_name) {
+            continue;
+        }
+        if (strncmp(name, export_name, 1024) == 0) {
+            return m->exports[e].value;
+        }
+    }
+    return NULL;
+}
+
+// 打开文件并将文件映射进内存
+uint8_t *mmap_file(char *path, int *len) {
+    int fd;
+    int res;
+    struct stat sb;
+    uint8_t *bytes;
+
+    fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        FATAL("Could not open file '%s'\n", path)
+    }
+
+    res = fstat(fd, &sb);
+    if (res < 0) {
+        FATAL("Could not stat file '%s' (%d)\n", path, res)
+    }
+
+    bytes = mmap(0, sb.st_size, PROT_READ, MAP_SHARED, fd, 0);
+
+    // 如果有需要，会将映射的内存大小赋值给参数 len
+    if (len) {
+        *len = (int) sb.st_size;
+    }
+    if (bytes == MAP_FAILED) {
+        FATAL("Could not mmap file '%s'", path)
+    }
+    return bytes;
+}
+
+// 将字符串 str 按照空格拆分成多个参数
+// 其中 argc 被赋值为拆分字符串 str 得到的参数数量
+char *argv_buf[100];
+char **split_argv(char *str, int *argc) {
+    argv_buf[(*argc)++] = str;
+
+    for (int i = 1; str[i] != '\0'; i += 1) {
+        if (str[i - 1] == ' ') {
+            str[i - 1] = '\0';
+            argv_buf[(*argc)++] = str + i;
+        }
+    }
+    argv_buf[(*argc)] = NULL;
+    return argv_buf;
+}
+
+// 解析函数参数，并将参数压入到操作数栈
+void parse_args(Module *m, Type *type, int argc, char **argv) {
+    for (int i = 0; i < argc; i++) {
+        for (int j = 0; argv[i][j]; j++) {
+            argv[i][j] = (char) tolower(argv[i][j]);
+        }
+        m->sp++;
+        // 将参数压入到操作数栈顶
+        StackValue *sv = &m->stack[m->sp];
+        // 设置参数的值类型
+        sv->value_type = type->params[i];
+        // 按照参数的值类型，设置参数的值
+        switch (type->params[i]) {
+            case I32:
+                sv->value.uint32 = strtoul(argv[i], NULL, 0);
+                break;
+            case I64:
+                sv->value.uint64 = strtoull(argv[i], NULL, 0);
+                break;
+            case F32:
+                if (strncmp("-nan", argv[i], 4) == 0) {
+                    sv->value.f32 = -NAN;
+                } else {
+                    sv->value.f32 = (float) strtod(argv[i], NULL);
+                }
+                break;
+            case F64:
+                if (strncmp("-nan", argv[i], 4) == 0) {
+                    sv->value.f64 = -NAN;
+                } else {
+                    sv->value.f64 = strtod(argv[i], NULL);
+                }
+                break;
+        }
+    }
 }
