@@ -94,6 +94,8 @@ int main(int argc, char **argv) {
         if (res) {
             if (m->sp >= 0) {
                 printf("%s\n", value_repr(&m->stack[m->sp]));
+                // 刷新标准输出缓冲区，把输出缓冲区里的东西打印到标准输出设备上，已实现及时获取执行结果
+                fflush(stdout);
             }
         } else {
             ERROR("Exception: %s\n", exception)
