@@ -3,6 +3,7 @@
 
 #include "module.h"
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 typedef uint64_t u64;
@@ -139,7 +140,7 @@ double wa_fmin(double a, double b);
     } else if ((A) >= (RMAX)) {                            \
         (RES) = IMAX;                                      \
     } else {                                               \
-        (RES) = (TYPE)(A);                                 \
+        (RES) = (TYPE) (A);                                \
     }
 
 #define OP_I32_TRUNC_SAT_F32(RES, A) OP_TRUNC_SAT(RES, A, i32, -2147483904.0f, 2147483648.0f, INT32_MIN, INT32_MAX)

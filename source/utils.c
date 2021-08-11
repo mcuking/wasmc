@@ -3,9 +3,11 @@
 #include <ctype.h>
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -315,7 +317,7 @@ char *value_repr(StackValue *v) {
             snprintf(value_str, 255, "0x%x:i32", v->value.uint32);
             break;
         case I64:
-            snprintf(value_str, 255, "0x%llx:i64", v->value.uint64);
+            snprintf(value_str, 255, "%" PRIu64 ":i64", v->value.uint64);
             break;
         case F32:
             snprintf(value_str, 255, "%.7g:f32", v->value.f32);

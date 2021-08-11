@@ -4,6 +4,7 @@
 #include "utils.h"
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
