@@ -13,4 +13,4 @@ set(SOURCES
 
 add_executable(wasmc ${SOURCES})
 
-target_link_libraries(wasmc readline)
+target_link_libraries(wasmc readline m dl)
