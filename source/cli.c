@@ -1,7 +1,9 @@
 #include "interpreter.h"
 #include "module.h"
 #include "utils.h"
+#include <readline/history.h>
 #include <readline/readline.h>
+#include <stdint.h>
 #include <string.h>
 
 #define BEGIN(x, y) "\033[" #x ";" #y "m"// x: 背景，y: 前景
@@ -75,7 +77,8 @@ int main(int argc, char **argv) {
 
         // 如果没有查找到函数，则报错提示信息，并进入下一个循环
         if (!func) {
-            ERROR("no exported function named '%s'\n", argv[0]) continue;
+            ERROR("no exported function named '%s'\n", argv[0])
+            continue;
         }
 
         // 解析函数参数，并将参数压入到操作数栈

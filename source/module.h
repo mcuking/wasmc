@@ -1,6 +1,7 @@
 #ifndef WASMC_MODULE_H
 #define WASMC_MODULE_H
 
+#include <stdint.h>
 #include <stdlib.h>
 
 #define WA_MAGIC 0x6d736100// 魔数（magic number）

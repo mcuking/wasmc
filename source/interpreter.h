@@ -3,6 +3,7 @@
 
 #include "module.h"
 #include <stdbool.h>
+#include <stdint.h>
 
 // 调用函数前的设置，主要设置内容如下：
 // 1. 将当前函数关联的栈帧压入到调用栈顶成为当前栈帧，同时保存该栈帧被压入调用栈顶前的运行时状态，例如 sp fp ra 等
