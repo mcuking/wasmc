@@ -99,6 +99,10 @@ void skip_immediate(const uint8_t *bytes, uint32_t *pos) {
             // 注：LEB128 编码仅针对整数，而该指令的立即数为浮点数，并没有被编码，而是直接写入到 Wasm 二进制文件中的
             *pos += 8;
             break;
+        case TruncSat:
+            // TruncSat 指令的操作码由两个字节表示，第二个字节的数值用来表示不同类型的浮点数和整数之间的转换
+            read_LEB_unsigned(bytes, pos, 8);
+            break;
         default:
             // 其他操作码没有立即数
             // 注：Wasm 指令大部分指令没有立即数
@@ -180,7 +184,7 @@ void find_blocks(Module *m) {
                     // 设置控制块的跳转地址 br_addr
                     if (block->block_type == Loop) {
                         // 如果是 Loop 类型的控制块，需要循环执行，所以跳转地址就是该控制块开头指令（即 Loop 指令）的下一条指令地址
-                        // 注：Loop 指令占用两个字节（1字节操作码 + 1字节操作数），所以需要加 2
+                        // 注：Loop 指令占用两个字节（1 字节操作码 + 1 字节操作数），所以需要加 2
                         block->br_addr = block->start_addr + 2;
                     } else {
                         // 如果是非 Loop 类型的控制块，则跳转地址就是该控制块的结尾地址，也就是操作码 End_ 的地址
@@ -281,7 +285,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
     // 起始函数索引初始值设置为 -1
     m->start_function = -1;
 
-    // 首先读取魔数(magic number)，检查是否正确
+    // 首先读取魔数 (magic number)，检查是否正确
     // 注：和其他很多二进制文件（例如 Java 类文件）一样，Wasm 也同样使用魔数来标记其二进制文件类型
     // 所谓魔数，你可以简单地将它理解为具有特定含义的一串数字
     // 一个标准 Wasm 二进制模块文件的头部数据是由具有特殊含义的字节组成的
@@ -459,7 +463,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
                             func->import_module = import_module;
                             // 设置【导入函数的导入成员名】为【本地模块中对应函数的导入成员名】
                             func->import_field = import_field;
-                            // 设置【本地模块中对应函数的指针 func_ptr 】指向【导入函数的实际值】
+                            // 设置【本地模块中对应函数的指针 func_ptr】指向【导入函数的实际值】
                             func->func_ptr = val;
                             // 设置【导入函数签名】为【本地模块中对应函数的函数签名】
                             func->type = &m->types[type_index];
@@ -743,7 +747,7 @@ struct Module *load_module(const uint8_t *bytes, const uint32_t byte_count) {
             case ElemID: {
                 // 解析元素段
                 // 元素段用于存放表初始化数据
-                // 元素项包含三部分：1.表索引（初始化哪张表）2.表内偏移量（从哪开始初始化） 3. 函数索引列表（给定的初始化数据）
+                // 元素项包含三部分：1.表索引（初始化哪张表）2.表内偏移量（从哪开始初始化）3. 函数索引列表（给定的初始化数据）
 
                 // 元素段编码格式如下：
                 // elem_sec: 0x09|byte_count|vec<elem>
