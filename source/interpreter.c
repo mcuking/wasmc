@@ -70,7 +70,7 @@ Block *pop_block(Module *m) {
     if (t->result_count == 1) {
         // 背景知识：目前多返回值提案还没有进入 Wasm 标准，根据当前版本的 Wasm 标准，控制块不能有参数，且最多只能有一个返回值
         // 如果控制块有一个返回值，则这个返回值需要压入到恢复后的操作数栈顶，即恢复后的操作数栈长度需要加 1
-        // 所以恢复的【操作数栈顶指针值】 是 该栈帧被压入调用栈前的【操作数栈顶指针】再加 1
+        // 所以恢复的【操作数栈顶指针值】是 该栈帧被压入调用栈前的【操作数栈顶指针】再加 1
         if (frame->sp < m->sp) {
             m->stack[frame->sp + 1] = m->stack[m->sp];
             m->sp = frame->sp + 1;
@@ -446,7 +446,7 @@ bool interpret(Module *m) {
                     setup_call(m, fidx);
 
                     // 由于 setup_call 函数中会将函数参数和局部变量压入操作数栈，
-                    // 所以可以校验【函数签名中声明的参数数量+函数局部变量数量】和【压入操作数栈的函数参数和局部变量总数】是否相等，
+                    // 所以可以校验【函数签名中声明的参数数量 + 函数局部变量数量】和【压入操作数栈的函数参数和局部变量总数】是否相等，
                     // 如果不相等则记录异常信息并返回 false 退出虚拟机执行
                     if (ftype->param_count + func->local_count != m->sp - m->fp + 1) {
                         sprintf(exception, "indirect call type mismatch (param counts differ)");
@@ -614,7 +614,7 @@ bool interpret(Module *m) {
                         break;
                     case I32Load8U:
                         // 从内存拷贝 1 个字节无符号数到操作数栈顶（栈顶类型为 32 位整数）
-                        // 因为是无符号数，在转换为更大的数据类型时, 只需简单地在开头添加 0 占位，无需特殊转换
+                        // 因为是无符号数，在转换为更大的数据类型时，只需简单地在开头添加 0 占位，无需特殊转换
                         memcpy(&stack[m->sp].value, maddr, 1);
                         stack[m->sp].value_type = I32;
                         break;
@@ -626,7 +626,7 @@ bool interpret(Module *m) {
                         break;
                     case I32Load16U:
                         // 从内存拷贝 2 个字节无符号数到操作数栈顶（栈顶类型为 32 位整数）
-                        // 因为是无符号数，在转换为更大的数据类型时, 只需简单地在开头添加 0 占位，无需特殊转换
+                        // 因为是无符号数，在转换为更大的数据类型时，只需简单地在开头添加 0 占位，无需特殊转换
                         memcpy(&stack[m->sp].value, maddr, 2);
                         stack[m->sp].value_type = I32;
                         break;
@@ -638,7 +638,7 @@ bool interpret(Module *m) {
                         break;
                     case I64Load8U:
                         // 从内存拷贝 1 个字节无符号数到操作数栈顶（栈顶类型为 64 位整数）
-                        // 因为是无符号数，在转换为更大的数据类型时, 只需简单地在开头添加 0 占位，无需特殊转换
+                        // 因为是无符号数，在转换为更大的数据类型时，只需简单地在开头添加 0 占位，无需特殊转换
                         memcpy(&stack[m->sp].value, maddr, 1);
                         stack[m->sp].value_type = I64;
                         break;
@@ -650,7 +650,7 @@ bool interpret(Module *m) {
                         break;
                     case I64Load16U:
                         // 从内存拷贝 2 个字节无符号数到操作数栈顶（栈顶类型为 64 位整数）
-                        // 因为是无符号数，在转换为更大的数据类型时, 只需简单地在开头添加 0 占位，无需特殊转换
+                        // 因为是无符号数，在转换为更大的数据类型时，只需简单地在开头添加 0 占位，无需特殊转换
                         memcpy(&stack[m->sp].value, maddr, 2);
                         stack[m->sp].value_type = I64;
                         break;
@@ -662,7 +662,7 @@ bool interpret(Module *m) {
                         break;
                     case I64Load32U:
                         // 从内存拷贝 4 个字节无符号数到操作数栈顶（栈顶类型为 64 位整数）
-                        // 因为是无符号数，在转换为更大的数据类型时, 只需简单地在开头添加 0 占位，无需特殊转换
+                        // 因为是无符号数，在转换为更大的数据类型时，只需简单地在开头添加 0 占位，无需特殊转换
                         memcpy(&stack[m->sp].value, maddr, 4);
                         stack[m->sp].value_type = I64;
                         break;

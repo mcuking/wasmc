@@ -18,7 +18,7 @@
 char exception[4096];
 
 /*
- * LEB128（Little Endian Base 128） 变长编码格式目的是节约空间
+ * LEB128（Little Endian Base 128）变长编码格式目的是节约空间
  * 对于 32 位整数，编码后可能是 1 到 5 个字节
  * 对于 64 位整数，编码后可能是 1 到 10 个字节
  * 越小的整数，编码后占用的字节数就越小
@@ -134,7 +134,7 @@ bool resolve_sym(char *filename, char *symbol, void **val, char **err) {
     }
 
     // 查找动态库中的 symbol
-    // 根据 动态链接库 操作句柄(handle)与符号(symbol)，返回符号对应的地址。使用这个函数不但可以获取函数地址，也可以获取变量地址。
+    // 根据 动态链接库 操作句柄 (handle) 与符号 (symbol)，返回符号对应的地址。使用这个函数不但可以获取函数地址，也可以获取变量地址。
     // handle：由 dlopen 打开动态链接库后返回的指针；
     // symbol：要求获取的函数或全局变量的名称。
     // 返回值：指向函数的地址，供调用使用。
