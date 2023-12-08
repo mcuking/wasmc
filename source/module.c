@@ -85,6 +85,7 @@ void skip_immediate(const uint8_t *bytes, uint32_t *pos) {
         case I32Const:
             // I32Const 指令的立即数表示 32 有符号整数（占 4 个字节）
             read_LEB_unsigned(bytes, pos, 32);
+            break;
         case I64Const:
             // F32Const 指令的立即数表示 64 有符号整数（占 8 个字节）
             read_LEB_unsigned(bytes, pos, 64);
